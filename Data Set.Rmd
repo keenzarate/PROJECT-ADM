@@ -15,4 +15,17 @@ dat <- as.data.frame(dat)
 View(dat)
 ```
 
-##Regression
+
+
+
+Exploratory Analysis
+```{r}
+ggplot(data = dat, aes(dat$Age,dat$DailyRate))+geom_point()
+
+```
+##KNN Regression
+
+```{r}
+
+
+```
