@@ -45,7 +45,6 @@ The graphs above shows a positive relationship between age and monthly income ac
 
 ```{r}
 # Years since last promotion vs Years with current manager
-
 qplot(YearsSinceLastPromotion, YearsWithCurrManager, data = attrition)
 ```
 There does not seem to be any significant relationship between years since last promotion and years with current manager due to the random distribution shown in the plot
@@ -73,7 +72,7 @@ old.par = par()
 par(mfrow = c(1,3))
 with (attrition, {
   boxplot(attrition$DailyRate ~ attrition$Attrition, xlab = "Attrition by Daily Rate")
-  boxplot(attrition$HourlyRate ~ attrition$Attrition, xlab = "attrition by Hourly Rate")
+  boxplot(attrition$HourlyRate ~ attrition$Attrition, xlab = "Attrition by Hourly Rate")
   boxplot(attrition$MonthlyRate ~ attrition$Attrition, xlab = "Attrition by Monthly Rate")
 }
 )
@@ -162,3 +161,54 @@ S
 T=favstats(~attrition$JobSatisfaction|attrition$Attrition)
 T
 ```
+
+
+##Regressions
+
+**Linear**
+
+```{r}
+
+
+
+```
+
+
+**Logistic**
+
+```{r}
+
+
+```
+
+
+**KNN**
+
+```{r}
+
+```
+
+
+##Classifications
+
+**KNN**
+```{r}
+
+
+```
+
+
+
+**LDA**
+```{r}
+
+
+```
+
+##Cluster
+
+##Random Forest
+
+##SVM, PCA, SVD, ADABoosting
+
+
