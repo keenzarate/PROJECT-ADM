@@ -13,6 +13,9 @@ library(tidyverse)
 library(ggplot2)
 library(lattice)
 library(mosaic)
+library(MASS)
+library(tree)
+library(randomForest)
 ```
 
 ## Exploratory Data Analysis
@@ -168,17 +171,17 @@ T
 **Linear**
 
 ```{r}
-
-
-
+names(attrition)
+mod.lin <- lm(Age~ DailyRate+DistanceFromHome+JobRole+YearsAtCompany,data=attrition)
+summary(mod.lin)
 ```
 
 
 **Logistic**
 
 ```{r}
-
-
+mod.log <- glm(Age~ Attrition,data=attrition)
+summary(mod.log)
 ```
 
 
