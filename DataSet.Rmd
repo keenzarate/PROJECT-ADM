@@ -1,6 +1,7 @@
 ---
 title: "Data Set"
 output: html_document
+author: Keen, Tariro,Roo, Obinna
 ---
 
 ```{r}
@@ -23,9 +24,32 @@ Exploratory Analysis
 ggplot(data = dat, aes(dat$Age,dat$DailyRate))+geom_point()
 
 ```
+
+
+QUESTION #1: 
+
+Which age group is most likely to leave work looking in to “job satisfaction”,
+“number of companies work, or based on other factors how likely are they to stay with the company  based on variable (attrition YES or NO)
+
 ##KNN Regression
 
 ```{r}
 
 
 ```
+
+##Linear Regression
+```{r}
+
+```
+
+##Logistic Regression
+
+
+```{r}
+
+
+
+```
+
+
