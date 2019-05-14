@@ -4,7 +4,6 @@ output: html_document
 editor_options: 
   chunk_output_type: console
 ---
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
@@ -12,6 +11,8 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 library(tidyverse)
 library(ggplot2)
+library(lattice)
+library(mosaic)
 ```
 
 ## Exploratory Data Analysis
@@ -94,6 +95,7 @@ The boxplot suggests that Work and Life Balance are irrespective of marital stat
 #Job role vs percent salary hike
 Haha = favstats(~attrition$PercentSalaryHike|attrition$JobRole)
 Haha
+
 bwplot(attrition$PercentSalaryHike ~ attrition$JobRole, data=attrition)
 
 #attrition vs percent salary hike
@@ -141,10 +143,10 @@ p1 = ggplot(c, aes(x = log(Monthly.rate), y = MonthlyIncome))
 p1 +
   geom_point(aes(color = Perfomance))
 
-d$pred.SC = predict(lm(MonthlyIncome ~ log(Monthly.rate), data = c))
+c$pred.SC = predict(lm(MonthlyIncome ~ log(Monthly.rate), data = c))
 
 p1 + geom_point(aes(color = Perfomance)) +
-  geom_line(aes(y = d$pred.SC))
+  geom_line(aes(y = c$pred.SC))
 ```
 
 From the above scatterplot, we can see that there is no linear relationship between monthly income and monthly rate
