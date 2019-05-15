@@ -208,10 +208,11 @@ summary(mod.log)
 
 ```
 
-##Cluster
+##Cluster - Obinna
+
 
 ##Random Forest
 
-##SVM, PCA, SVD, ADABoosting
+##SVM - Obinna, PCA - Obinna, SVD, ADABoosting
 
 
