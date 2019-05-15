@@ -16,6 +16,10 @@ library(mosaic)
 library(MASS)
 library(tree)
 library(randomForest)
+library(dplyr)
+library(ggrepel)
+library(graphics)
+library(factoextra)
 ```
 
 ## Exploratory Data Analysis
@@ -213,5 +217,124 @@ summary(mod.log)
 ##Random Forest
 
 ##SVM, PCA, SVD, ADABoosting
+
+##PCA
+
+```{r}
+attri <- attrition$Attrition
+educ <- attrition$EducationField
+attri.df <- attrition[,-2]
+attri.df <- data.frame(select_if(attri.df, is.numeric))
+
+attri.df <- data.frame(scale(attri.df))
+```
+
+```{r}
+attri.pca <- prcomp(attri.df)
+fviz_pca_biplot(attri.pca,repel=TRUE)
+```
+This is really intense and hard to understand, it seems like most of the variables fit into one dimension, I'll try reducing the amount to see what we get.
+
+```{r}
+attri.pca2 <- prcomp(attri.df[,1:10])
+fviz_pca_biplot(attri.pca2,repel=TRUE)
+```
+
+Pull off the PCA information
+This is the change of basis matrix (V in the SVD)
+```{r}
+rots <- attri.pca$rotation
+```
+
+
+Rotate into the new basis.
+```{r}
+attri.pca1<- data.matrix(attri.df) %*% rots
+dim(attri.pca1)
+
+
+```
+
+
+The first three directions
+```{r}
+pca1 <- attri.pca1[,1]
+pca2 <- attri.pca1[,2]
+pca3 <- attri.pca1[,3]
+```
+
+
+##Add in K Means clustering to the Principal Components
+
+
+Five clusters, this is arbitrary
+```{r}
+K <- 5
+```
+
+
+run 30 times, allow up to 30  iterations for convergence
+```{r}
+attri.km <- kmeans(attri.df,K,iter.max=20,nstart=30)
+
+```
+
+
+Our clusters
+```{r}
+attri.km$cluster
+
+```
+
+
+Add the clusters to the data frame
+```{r}
+attri.df$cluster.km<- attri.km$cluster
+head(attri.df)
+
+```
+
+
+Look at one cluster
+Who are these players...any NBA fans out there?
+```{r}
+
+attri.df$educationfield <- attrition$EducationField
+filter(attri.df,cluster.km==1)%>%
+    dplyr::select(attri)
+
+
+```
+
+
+What are the cluster sizes?
+```{r}
+with(attri.df,table(cluster.km))
+
+```
+
+
+Build the rotated data frame
+```{r}
+attriCluster.df <- data.frame(pca1,pca2,cluster=factor(attri.df$cluster.km),name=educ)
+
+```
+
+
+plot the cluster.pcas on top of the PCA first two components
+```{r}
+ggplot(attriCluster.df,aes(pca1,pca2,color=cluster))+
+    geom_point(size=1)+
+    geom_text_repel(aes(label=name),size=3)+
+    ggtitle("Attrition Cluster Analsys and PCA")
+```
+
+
+```{r}
+with(attri.df,prop.table(table(educ, cluster.km)))
+with(attri.df, prop.table(table(educationfield)))
+
+```
+
 
 
