@@ -1,0 +1,43 @@
+---
+title: "Analysis"
+author: "Keen"
+date: "5/14/2019"
+output: html_document
+---
+
+```{r}
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(MASS)
+library(tree)
+library(randomForest)
+```
+
+```{r}
+dat <- read.csv("~/Desktop/PROJECT-ADM-master/ADM/WA_Fn-UseC_-HR-Employee-Attrition.csv")
+dat <- as.data.frame(dat)
+#View(dat)
+```
+
+
+Classification
+
+KNN
+
+```{r}
+
+
+
+```
+
+
+Cluster
+
+Random Forest
+
+```{r}
+
+
+
+```
