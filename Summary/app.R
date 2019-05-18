@@ -1,50 +1,39 @@
-#
-# This is a Shiny web application. You can run the application by clicking
-# the 'Run App' button above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    http://shiny.rstudio.com/
-#
-
 library(shiny)
+library(ggplot2)
 
-# Define UI for application that draws a histogram
+
 ui <- fluidPage(
-   
-   # Application title
-   titlePanel("Old Faithful Geyser Data"),
-   
-   # Sidebar with a slider input for number of bins 
-   sidebarLayout(
-      sidebarPanel(
-         sliderInput("bins",
-                     "Number of bins:",
-                     min = 1,
-                     max = 50,
-                     value = 30)
-      ),
-      
-      # Show a plot of the generated distribution
-      mainPanel(
-         plotOutput("distPlot")
-      )
-   )
+  titlePanel("Attrition"),
+  sidebarLayout(
+    sidebarPanel(
+      selectInput("Info","This is it:", choices=c("Age","Education"))
+    ),
+    mainPanel(
+      plotOutput("histogram"),
+      plotOutput("bar"),
+      br(), br(),
+      tableOutput("results")
+  ))
 )
+
 
 # Define server logic required to draw a histogram
 server <- function(input, output) {
-   
-   output$distPlot <- renderPlot({
-      # generate bins based on input$bins from ui.R
-      x    <- faithful[, 2] 
-      bins <- seq(min(x), max(x), length.out = input$bins + 1)
-      
-      # draw the histogram with the specified number of bins
-      hist(x, breaks = bins, col = 'darkgray', border = 'white')
-   })
+  attrition <- read.csv("~/Desktop/PROJECT-ADM-master/ADM/WA_Fn-UseC_-HR-Employee-Attrition.csv")
+  library(ggplot2)
+  output$histogram <- renderPlot({
+    attrition %>% filter(Age=input$Info)
+    ggplot(attrition, aes(x=Age)) +
+      geom_histogram()
+  })
+  output$bar <- renderPlot({
+    attrition %>% filter(Education=input$Info)
+    ggplot(attrition, aes(x=DailyRate))+
+      geom_point()
+  })
 }
 
+  
 # Run the application 
 shinyApp(ui = ui, server = server)
 
