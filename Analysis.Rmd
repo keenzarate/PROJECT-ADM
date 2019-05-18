@@ -1,5 +1,5 @@
 ---
-title: "TariAnalysis"
+title: "Random forest and Decision Trees"
 output: html_document
 editor_options: 
   chunk_output_type: console
