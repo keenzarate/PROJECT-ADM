@@ -243,7 +243,7 @@ with(train.df,table(Attrition,preds.train))
 
 ```{r}
 ##make some predictions with test data
-preds.test<- predict(mod.tree1,newdata=test.df,type="class")
+preds.test<- predict(mod.tree,newdata=test.df,type="class")
 
 ##confusion matrix
 with(test.df,table(Attrition,preds.test))
@@ -254,18 +254,18 @@ with(test.df,table(Attrition,preds.test))
 Try with smaller mindev, how does err.test change?
 
 ```{r}
-mod.tree <- tree(Attrition~.,data=train.df,
+mod.tree2 <- tree(Attrition~.,data=train.df,
                   control=tree.control(nrow(train.df),mindev=0.000))
-(numLeaves <- sum(mod.tree$frame$var =="<leaf>"))
+(numLeaves <- sum(mod.tree2$frame$var =="<leaf>"))
 
-numFolds <- 10
+numFolds <- 20
 folds <- sample(1:numFolds,nrow(train.df),rep=T)
 
 err <- matrix(nrow=numLeaves,ncol=3)
 errCV <- numeric(numFolds)
 for(treeSize in numLeaves:2){
     print(treeSize)
-    model.prune <- prune.tree(mod.tree,best=treeSize)
+    model.prune <- prune.tree(mod.tree2,best=treeSize)
     preds.train <- predict(model.prune,newdata=train.df,type="class")
     preds.ttest <- predict(model.prune,newdata=test.df,type="class")
     errTrain <- with(train.df,mean(Attrition!=preds.train))
@@ -295,16 +295,20 @@ data.frame(treeSize=2:numLeaves,
     scale_color_manual(values=c("red","blue","black"))
 
 ```
+Seems like test error did not change
 
-Let's prune our tree! Cross validate:
+Let's prune our tree! Single Cross validation for optimal size
 ```{r}
 mod.cv <- cv.tree(mod.tree,FUN=prune.misclass)
 plot(mod.cv$size,mod.cv$dev)
+plot(mod.cv)
 ```
 
 What is our optimal tree size?
 ```{r}
 (opt.size <- mod.cv$size[which(mod.cv$dev==min(mod.cv$dev))])
+size <- rev(mod.cv$size)
+(opt.size2 <- size[which.min(rev(mod.cv$dev))])
 ```
 
 ```{r}
