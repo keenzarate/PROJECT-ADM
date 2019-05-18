@@ -70,6 +70,7 @@ hose
 The graphs above suggests that the greater the distance from home the more likely it is for an employee to be lost through attrition.
 
 ```{r}
+require(ggthemes)
 ggplot(attrition,aes(DistanceFromHome,fill=Attrition))+
   geom_density(alpha=0.5)+
   theme_few()+
@@ -196,8 +197,12 @@ ggplot(attrition)+
   geom_point(aes(Age,MonthlyIncome,color=factor(TotalWorkingYears)))
 ```
 
+
+
+
 ##Let's just do a bit of data clean up. We can try to put this in four categories. 
 ```{r}
+##put in data frame
 attrition <- data.frame(attrition)
 
 attrition$Education <- as.factor(attrition$Education)
@@ -229,16 +234,21 @@ test.df <- attrition[-train,]
 
 Decision Tree
 
+Here, we are gunna predict Atttrition using decision tree and see which variable is the most important in predicting whether or nott someone will leave their job. 
+
 ```{r}
 mod.tree <- tree(Attrition~., data=train.df,control=tree.control(nrow(attrition),mindev = 0.01))
 summary(mod.tree)
 ```
 
+Let's see the tree
 ```{r}
 plot(mod.tree)
 text(mod.tree, pretty=0,cex=0.5)
 ```
-predict train data. how well was our train data?
+Observation: Seems like some of the most important variable for Attrition are YearsAtCompany, PercentSalaryHike, YearsSinceLastPromotion, MonthlyRate. 
+
+Predict train data. how well was our train data?
 ```{r}
 ##make some predictions with test data
 preds.train<- predict(mod.tree,type="class")
@@ -249,17 +259,21 @@ with(train.df,table(Attrition,preds.train))
 (err.train<- with(train.df,mean(Attrition!=preds.train)))
 ```
 
+Conclusion: Our train data was pretty good with error rate of 0.09931973
+
+How about wih our test data?
 ```{r}
 ##make some predictions with test data
 preds.test<- predict(mod.tree,newdata=test.df,type="class")
-
 ##confusion matrix
 with(test.df,table(Attrition,preds.test))
 
 (err.test <- with(test.df,mean(Attrition!=preds.test)))
 ```
+Conclusion: Not bad, I think maybe we can do better?
 
-Try with smaller mindev, how does err.test change?
+
+Here, we are gunna try with smaller mindev, how does err.test change?
 
 ```{r}
 mod.tree2 <- tree(Attrition~.,data=train.df,
