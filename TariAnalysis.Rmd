@@ -1,0 +1,340 @@
+---
+title: "TariAnalysis"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(lattice)
+library(mosaic)
+library(MASS)
+library(tree)
+library(randomForest)
+library(dplyr)
+library(ggrepel)
+library(graphics)
+library(factoextra)
+```
+
+## Exploratory Data Analysis
+
+```{r}
+#Lets take a look at the data
+attrition = read_csv("WA_Fn-UseC_-HR-Employee-Attrition.csv")
+head(attrition)
+summary(attrition)
+str(attrition)
+```
+
+```{r}
+#Check for missing values
+is.na(attrition)
+ggplot(attrition, aes(x = MonthlyIncome)) + geom_histogram()
+```
+Histogram shows the distribution of monthly income in our dataset. The histogram is left skewed therefore we see that monthly income 
+
+```{r}
+# Age against Monthly income per education field
+
+Age = attrition$Age
+MonthlyIncome = attrition$MonthlyIncome
+field = attrition$EducationField
+
+qplot(Age, log(MonthlyIncome), data = attrition, color = EducationField)
+```
+The graphs above shows a positive relationship between age and monthly income across different kinds of educational fields.
+
+```{r}
+# Years since last promotion vs Years with current manager
+qplot(YearsSinceLastPromotion, YearsWithCurrManager, data = attrition)
+```
+There does not seem to be any significant relationship between years since last promotion and years with current manager due to the random distribution shown in the plot
+
+```{r}
+#Attrition vs Number of companies worked
+
+hase = ggplot(attrition, aes(x = Attrition, y = NumCompaniesWorked)) +
+  geom_boxplot()
+hase
+```
+The boxplot above shows that most employees lost to attrition have worked fewer companies than those who are not.
+
+```{r}
+#Attrition vs Distance from Home
+
+hose = ggplot(attrition, aes(x = Attrition, y = DistanceFromHome)) + geom_boxplot()
+hose
+```
+The graphs above suggests that the greater the distance from home the more likely it is for an employee to be lost through attrition.
+
+```{r}
+#Attition vs Daily Rate/Distance From Home/ Houtly Rate
+old.par = par()
+par(mfrow = c(1,3))
+with (attrition, {
+  boxplot(attrition$DailyRate ~ attrition$Attrition, xlab = "Attrition by Daily Rate")
+  boxplot(attrition$HourlyRate ~ attrition$Attrition, xlab = "Attrition by Hourly Rate")
+  boxplot(attrition$MonthlyRate ~ attrition$Attrition, xlab = "Attrition by Monthly Rate")
+}
+)
+par(old.par)
+```
+
+From the boxplots above, it seems attrition is most significantly affected by the daily rate as those who faced attrition had a significantly lower mean for daily rate as opposed to those who did not. As for attrition by hourly rate and by monthly rate, there does not seem to be any significant difference in means.
+
+```{r}
+#Work Life Balance vs Status
+
+gaal = ggplot(attrition, aes(x = MaritalStatus, y = WorkLifeBalance)) + geom_boxplot()
+gaal
+```
+
+The boxplot suggests that Work and Life Balance are irrespective of marital status as the means across the three different marital groups are the same
+
+```{r}
+#Job role vs percent salary hike
+Haha = favstats(~attrition$PercentSalaryHike|attrition$JobRole)
+Haha
+
+bwplot(attrition$PercentSalaryHike ~ attrition$JobRole, data=attrition)
+
+#attrition vs percent salary hike
+Hehe = favstats(~attrition$PercentSalaryHike|attrition$Attrition)
+Hehe
+bwplot(attrition$PercentSalaryHike ~ attrition$Attrition, data=attrition)
+
+#Gender by Montly Income
+bwplot(attrition$MonthlyIncome ~ attrition$Gender, data=attrition)
+```
+
+Based on the tables above, Percent Salary Hike is independent of Job Role and is not a major factor in determining attrition as the means are almost the same between those employees lost to attrition and those not. It is also interesting from the Monthly income by gender boxplot that both men and women seem to be earning roughly the same amount which is usually not the case.
+
+```{r}
+Perfomance = attrition$PerformanceRating
+MonthlyIncome = attrition$MonthlyIncome
+Monthly.rate = attrition$MonthlyRate
+
+qplot(Monthly.rate, MonthlyIncome, data = attrition, color = Perfomance)
+
+old.par = par()
+# create a grid of one row and two columns
+par(mfrow = c(1,2))
+with(c, {
+      ggplot(c,
+       aes(y = MonthlyIncome, x = log(Monthly.rate))) +
+  geom_point()
+  p1 +
+  geom_point(aes(color = "Perfomance == 3"))
+  ggplot(c,
+       aes(y = MonthlyIncome, x = log(Monthly.rate))) +
+  geom_point()
+  p1 +
+  geom_point(aes(color = "Perfomance == 4"))
+}
+)
+
+c = data.frame(Monthly.rate, MonthlyIncome, Perfomance)
+ggplot(c,
+       aes(y = MonthlyIncome, x = log(Monthly.rate))) +
+  geom_point()
+
+p1 = ggplot(c, aes(x = log(Monthly.rate), y = MonthlyIncome))
+
+p1 +
+  geom_point(aes(color = Perfomance))
+
+c$pred.SC = predict(lm(MonthlyIncome ~ log(Monthly.rate), data = c))
+
+p1 + geom_point(aes(color = Perfomance)) +
+  geom_line(aes(y = c$pred.SC))
+```
+
+From the above scatterplot, we can see that there is no linear relationship between monthly income and monthly rate
+
+```{r}
+counts = table(attrition$Attrition, attrition$BusinessTravel)
+barplot(counts, main = "Attrition vs Business Travel", xlab="Number of attrition", col=c("darkblue","red"),
+ 	legend = rownames(counts))
+
+S=favstats(~attrition$JobInvolvement|attrition$Attrition)
+S
+
+T=favstats(~attrition$JobSatisfaction|attrition$Attrition)
+T
+```
+
+
+##Regressions
+
+**Linear**
+
+```{r}
+names(attrition)
+mod.lin <- lm(Age~ DailyRate+DistanceFromHome+JobRole+YearsAtCompany,data=attrition)
+summary(mod.lin)
+```
+
+
+**Logistic**
+
+```{r}
+mod.log <- glm(Age~ Attrition,data=attrition)
+summary(mod.log)
+```
+
+
+**KNN**
+
+```{r}
+
+```
+
+
+##Classifications
+
+**KNN**
+```{r}
+
+
+```
+
+
+
+**LDA**
+```{r}
+
+
+```
+
+##Cluster
+
+##Random Forest
+
+##SVM, PCA, SVD, ADABoosting
+
+##PCA
+
+```{r}
+attri <- attrition$Attrition
+educ <- attrition$EducationField
+attri.df <- attrition[,-2]
+attri.df <- data.frame(select_if(attri.df, is.numeric))
+
+attri.df <- data.frame(scale(attri.df))
+```
+
+```{r}
+attri.pca <- prcomp(attri.df)
+fviz_pca_biplot(attri.pca,repel=TRUE)
+```
+This is really intense and hard to understand, it seems like most of the variables fit into one dimension, I'll try reducing the amount to see what we get.
+
+```{r}
+attri.pca2 <- prcomp(attri.df[,1:10])
+fviz_pca_biplot(attri.pca2,repel=TRUE)
+```
+
+Pull off the PCA information
+This is the change of basis matrix (V in the SVD)
+```{r}
+rots <- attri.pca$rotation
+```
+
+
+Rotate into the new basis.
+```{r}
+attri.pca1<- data.matrix(attri.df) %*% rots
+dim(attri.pca1)
+
+
+```
+
+
+The first three directions
+```{r}
+pca1 <- attri.pca1[,1]
+pca2 <- attri.pca1[,2]
+pca3 <- attri.pca1[,3]
+```
+
+
+##Add in K Means clustering to the Principal Components
+
+
+Five clusters, this is arbitrary
+```{r}
+K <- 5
+```
+
+
+run 30 times, allow up to 30  iterations for convergence
+```{r}
+attri.km <- kmeans(attri.df,K,iter.max=20,nstart=30)
+
+```
+
+
+Our clusters
+```{r}
+attri.km$cluster
+
+```
+
+
+Add the clusters to the data frame
+```{r}
+attri.df$cluster.km<- attri.km$cluster
+head(attri.df)
+
+```
+
+
+Look at one cluster
+Who are these players...any NBA fans out there?
+```{r}
+
+attri.df$educationfield <- attrition$EducationField
+filter(attri.df,cluster.km==1)%>%
+    dplyr::select(attri)
+
+
+```
+
+
+What are the cluster sizes?
+```{r}
+with(attri.df,table(cluster.km))
+
+```
+
+
+Build the rotated data frame
+```{r}
+attriCluster.df <- data.frame(pca1,pca2,cluster=factor(attri.df$cluster.km),name=educ)
+
+```
+
+
+plot the cluster.pcas on top of the PCA first two components
+```{r}
+ggplot(attriCluster.df,aes(pca1,pca2,color=cluster))+
+    geom_point(size=1)+
+    geom_text_repel(aes(label=name),size=3)+
+    ggtitle("Attrition Cluster Analsys and PCA")
+```
+
+
+```{r}
+with(attri.df,prop.table(table(educ, cluster.km)))
+with(attri.df, prop.table(table(educationfield)))
+
+```
+
+
+
