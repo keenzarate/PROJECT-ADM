@@ -283,7 +283,11 @@ mod.tree2 <- tree(Attrition~.,data=train.df,
                   control=tree.control(nrow(train.df),mindev=0.0000000))
 (numLeaves <- sum(mod.tree2$frame$var =="<leaf>"))
 
+<<<<<<< HEAD
+numFolds <- 10
+=======
 numFolds <- 25
+>>>>>>> 3e2b84e22aa3f575ea76cd2643548a0ee0591fa1
 folds <- sample(1:numFolds,nrow(train.df),rep=T)
 
 err <- matrix(nrow=numLeaves,ncol=3)
@@ -294,8 +298,14 @@ for(treeSize in numLeaves:2){
     preds.train <- predict(model.prune,newdata=train.df,type="class")
     preds.test <- predict(model.prune,newdata=test.df,type="class")
     errTrain <- with(train.df,mean(Attrition!=preds.train))
+<<<<<<< HEAD
+    errTest <- with(test.df,mean(Attrition!=preds.test))
+    ##Cross validate: 
+    
+=======
     errTest <- with(test.df,mean(Attrition !=preds.test))
     ##Cross validate: 
+>>>>>>> 3e2b84e22aa3f575ea76cd2643548a0ee0591fa1
     for(fold in 1:numFolds){
         attTrainTrain.df <- train.df[fold != folds,]
         attTrainTest.df <- train.df[fold == folds,]
