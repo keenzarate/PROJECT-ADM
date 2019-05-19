@@ -220,13 +220,137 @@ summary(mod.log)
 
 ##PCA
 
+Before trying to cluster since there are a lot of variables lets try to reduce the number of variables through picking the most important ones
+
+change order of columns
 ```{r}
-attri <- attrition$Attrition
-educ <- attrition$EducationField
+attri2 <- attrition[,c(2:34,1)]
+attri2 <- attri2[,-c(21)]
+```
+
+
+```{r}
+sampleSize <- nrow(attrition)
+```
+
+
+```{r}
+mseBoot <- function(data.df,M=50){
+    mse <- rep(0,M)
+    for(m in 1:M){
+        bootSamp <- sample(1:sampleSize,sampleSize,rep=T)
+        outOfBag <- setdiff(1:sampleSize,bootSamp)
+        train.df <- data.df[bootSamp,]
+        test.df <-   data.df[outOfBag,]
+        mod <- lm(Age~.,data=train.df)
+        vals <- predict(mod,newdata=test.df)
+        mse[m] <- with(test.df,mean((Age-vals)^2))
+    }
+    mean(mse)
+}
+```
+
+
+```{r}
+numPreds <- length(names(attri2))-1
+```
+
+```{r}
+allPreds <- 1:(numPreds)
+```
+
+```{r}
+currPreds <- c()
+```
+
+```{r}
+availPreds <- setdiff(allPreds,currPreds)
+length(availPreds)
+```
+
+```{r}
+maxPreds <- numPreds
+```
+
+```{r}
+minMSE <- numeric(maxPreds)
+```
+
+```{r}
+tot <- 0
+while( tot < maxPreds){
+    ##add predictor which decreases MSE (as determined by CV or
+    ##Bootstrapping)
+    ## The MSEs computed as we add each of the available predictors
+    allMSE <- numeric(length(availPreds))
+    ctr<-1
+    for(id in availPreds){
+        data.df <- attri2[,c(currPreds,id,numPreds+1)]
+        mse <- mseBoot(data.df,30)
+        allMSE[ctr] <- mse
+        ctr<-ctr+1
+    }
+    ##Find the min
+    id <- which.min(allMSE)
+    ##get the best predictor and MSW
+    bestPred <- availPreds[id]
+    bestMSE <- min(allMSE)
+    ##Add these into the collection
+    currPreds <- c(currPreds,bestPred)
+    tot <-tot+1
+    minMSE[tot] <- bestMSE
+    availPreds <- setdiff(allPreds,currPreds)
+    ## Print stuff out for debugging and attention-grabbing
+    print(sprintf("Predictor Added: %s  MSE Value: %s",bestPred,bestMSE))
+    print(currPreds)
+}
+```
+ It works, so we can now look at MSE Plot
+ 
+```{r}
+Titles <- names(attri2[,c(currPreds)])
+```
+ 
+change in MSE
+```{r}
+diffMSE <- c(0,minMSE[-length(minMSE)]-minMSE[-1])
+head(diffMSE)
+```
+
+```{r}
+result.df <- data.frame(id=1:length(Titles),Titles,minMSE,diffMSE=-10*diffMSE, predictors= currPreds)
+```
+
+```{r}
+cut <- 10
+ggplot(result.df %>%
+       filter(Titles %in% Titles[1:cut]))+
+    geom_segment(aes(x=1,xend=id,y=0,yend=0),size=.1,color="black")+
+    geom_segment(aes(x=id,xend=id,y=0,yend=minMSE),color="blue")+
+    geom_point(aes(x=id,y=minMSE),color="blue",size=1.5)+
+    geom_segment(aes(x=id,xend=id,y=0,yend=diffMSE),color="red")+
+    geom_point(aes(x=id,y=diffMSE),color="red",size=1.5)+
+    scale_x_continuous(breaks=1:length(Titles),label=Titles)+
+    coord_flip()+
+    ggtitle("Subset Selection: MSE Decrease")
+```
+
+These are the top 10 variables that can be used to predict someone's age based on attrition dataset. The bluw part shows the overall reduction in MSE whilst the red part shows the difference in MSE with the use of each variable.
+
+We can now use those variables in our PCA to see how different ages cluster together
+
+```{r}
+result.df <- result.df %>%
+  filter(minMSE <= quantile(result.df$minMSE, 0.25))
+```
+
+
+
+```{r}
+attri <- attrition[,result.df$predictors]
+ages <- attri$Age
 attri.df <- attrition[,-2]
 attri.df <- data.frame(select_if(attri.df, is.numeric))
-
-attri.df <- data.frame(scale(attri.df))
 ```
 
 ```{r}
@@ -299,9 +423,9 @@ Look at one cluster
 Who are these players...any NBA fans out there?
 ```{r}
 
-attri.df$educationfield <- attrition$EducationField
+attri.df$age <- attrition$Age
 filter(attri.df,cluster.km==1)%>%
-    dplyr::select(attri)
+    dplyr::select(age)
 
 
 ```
@@ -316,7 +440,7 @@ with(attri.df,table(cluster.km))
 
 Build the rotated data frame
 ```{r}
-attriCluster.df <- data.frame(pca1,pca2,cluster=factor(attri.df$cluster.km),name=educ)
+attriCluster.df <- data.frame(pca1,pca2,cluster=factor(attri.df$cluster.km),name=ages)
 
 ```
 
@@ -331,8 +455,8 @@ ggplot(attriCluster.df,aes(pca1,pca2,color=cluster))+
 
 
 ```{r}
-with(attri.df,prop.table(table(educ, cluster.km)))
-with(attri.df, prop.table(table(educationfield)))
+with(attri.df,prop.table(table(ages, cluster.km)))
+with(attri.df, prop.table(table(age)))
 
 ```
 
