@@ -23,12 +23,16 @@ library(rpart)
 
 ## Exploratory Data Analysis
 
+
+Load the data. 
 ```{r}
 #Lets take a look at the data
 attrition = read.csv("WA_Fn-UseC_-HR-Employee-Attrition.csv")
-View(attrition)
+#View(attrition)
 ```
 
+
+Graph on the 
 ```{r}
 #Check for missing values
 #is.na(attrition)
@@ -199,11 +203,11 @@ ggplot(attrition)+
 
 
 
-
 ##Let's just do a bit of data clean up. We can try to put this in four categories. 
 ```{r}
 ##put in data frame
 attrition <- data.frame(attrition)
+View(attrition)
 
 attrition$Education <- as.factor(attrition$Education)
 attrition$EnvironmentSatisfaction <- as.factor(attrition$EnvironmentSatisfaction)
@@ -220,7 +224,6 @@ attrition$EmployeeNumber <- NULL
 attrition$StandardHours <- NULL
 attrition$Over18 <- NULL
 
-summary(attrition)
 ```
 
 Split data into train and test train.
@@ -240,6 +243,7 @@ Here, we are gunna predict Atttrition using decision tree and see which variable
 mod.tree <- tree(Attrition~., data=train.df,control=tree.control(nrow(attrition),mindev = 0.01))
 summary(mod.tree)
 ```
+
 
 Let's see the tree
 ```{r}
@@ -274,13 +278,12 @@ Conclusion: Not bad, I think maybe we can do better?
 
 
 Here, we are gunna try with smaller mindev, how does err.test change?
-
 ```{r}
 mod.tree2 <- tree(Attrition~.,data=train.df,
-                  control=tree.control(nrow(train.df),mindev=0.000))
+                  control=tree.control(nrow(train.df),mindev=0.0000000))
 (numLeaves <- sum(mod.tree2$frame$var =="<leaf>"))
 
-numFolds <- 20
+numFolds <- 25
 folds <- sample(1:numFolds,nrow(train.df),rep=T)
 
 err <- matrix(nrow=numLeaves,ncol=3)
@@ -289,7 +292,7 @@ for(treeSize in numLeaves:2){
     print(treeSize)
     model.prune <- prune.tree(mod.tree2,best=treeSize)
     preds.train <- predict(model.prune,newdata=train.df,type="class")
-    preds.ttest <- predict(model.prune,newdata=test.df,type="class")
+    preds.test <- predict(model.prune,newdata=test.df,type="class")
     errTrain <- with(train.df,mean(Attrition!=preds.train))
     errTest <- with(test.df,mean(Attrition !=preds.test))
     ##Cross validate: 
@@ -297,14 +300,13 @@ for(treeSize in numLeaves:2){
         attTrainTrain.df <- train.df[fold != folds,]
         attTrainTest.df <- train.df[fold == folds,]
         att.cv <- tree(Attrition~.,data=attTrainTrain.df,
-                          control=tree.control(nrow(attTrainTrain.df),mindev=0.000))
+                          control=tree.control(nrow(attTrainTrain.df),mindev=0.0000000))
         att.cv.prune <- prune.tree(att.cv,best=treeSize)
         preds <- predict(att.cv.prune,newdata=attTrainTest.df,type="class")
-        errCV[fold] <- with(attTrainTest.df,mean(Attrition!=preds))
+        errCV[fold] <- with(attTrainTest.df,mean(Attrition!= preds))
     }
     err[treeSize,] <- c(errTrain,errTest,mean(errCV))
 }
-
 
 data.frame(treeSize=2:numLeaves,
            train=err[-1,1],
@@ -349,8 +351,7 @@ text(mod.prune,pretty=0,cex=0.5)
 ```
 Observation: 
 
-
-
+Seems like the important variable for employees staying at their company is HourlyRate, RelationshipSatisfacion, YearsAtCompany, and EnvironmentSatisfication. 
 
 
 
@@ -366,7 +367,8 @@ with(test.df,table(Attrition,mod.pred.prune))
 (err.prune.test<- with(test.df,mean(Attrition!=mod.pred.prune)))
 ```
 
-##compare error rates
+
+##compare error rates from the tree and the pruned tree
 
 ```{r}
 c(err.train,err.test,err.prune.test)
@@ -374,15 +376,16 @@ c(err.train,err.test,err.prune.test)
 Looks like we did a better job finding the most important variable for predicting attrition when we pruned our tree and found the best size. 
 
 
-
+Let's predict our prune tree with out testing data set. How does it look?
 ```{r}
 probs.prune <- predict(mod.prune,newdata=test.df)
 hist(probs.prune[,1],breaks=25)
 ```
 
+
 ##Random Forest 
 
-Here we are going to perform some out
+Here we are going to perform some out of bag error. What does random forest say the most important variable for predicting Attriion. 
 ```{r}
 p <- ncol(train.df)-1
 mod.rf <- randomForest(Attrition~., data = train.df, ntree = 500, mtry = p,importance = TRUE)
@@ -390,21 +393,26 @@ mod.rf
 
 ```
 
+
+Now, let's make a prediction using our testing data and see how well we did. 
 ```{r}
 ## Make some predictions on the test data
 preds.bag <- predict(mod.rf,newdata=test.df,ntree=500)
 
 ## Confusion matrix
-
 with(test.df,table(Attrition,preds.bag))
 
 (err.bag <- with(test.df,mean(Attrition!=preds.bag)))
 
 ```
 
+
+Let's compare the error rates from our decision tree, prune tree, and the out of bag error
 ```{r}
 c(err.test,err.prune.test,err.bag)
 ```
+
+
 
 ```{r}
 plot(mod.rf)
@@ -437,6 +445,8 @@ att.gbm <- gbm(Attrition ~ ., data=attrition,
                 shrinkage=lambda)
 
 ```
+
+
 ```{r}
 probs <- predict(att.gbm,newdata=attrition,n.trees=100,type="response")
 ##convert to a prediction.
