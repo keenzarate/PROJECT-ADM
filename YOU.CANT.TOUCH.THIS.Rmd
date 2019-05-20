@@ -403,7 +403,6 @@ with(test.df,table(Attrition,preds.bag))
 
 ```
 
-
 Let's compare the error rates from our decision tree, prune tree, and the out of bag error
 ```{r}
 c(err.test,err.prune.test,err.bag)
