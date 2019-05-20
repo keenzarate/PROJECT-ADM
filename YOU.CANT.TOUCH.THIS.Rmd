@@ -19,6 +19,18 @@ suppressMessages(library(tree))
 suppressMessages(library(mosaic))
 suppressMessages(library(randomForest))
 suppressMessages(library(rpart))
+library(tidyverse)
+library(ggplot2)
+library(lattice)
+library(mosaic)
+library(MASS)
+library(tree)
+library(randomForest)
+library(dplyr)
+library(ggrepel)
+library(graphics)
+library(factoextra)
+library(gbm)
 ```
 
 ## Exploratory Data Analysis
@@ -27,7 +39,6 @@ Load the data.
 ```{r}
 #Lets take a look at the data
 attrition = read.csv("WA_Fn-UseC_-HR-Employee-Attrition.csv")
-attrition <- as.data.frame(attrition)
 #View(attrition)
 ```
 
@@ -154,10 +165,10 @@ ggplot(attrition,aes(x=EnvironmentSatisfaction,fill=Attrition))+
   geom_bar()+
   facet_grid(".~Gender")+scale_fill_brewer(palette = "Set2")
 ```
+It seems like a lot of employees are pretty satisfied with their job or environment.
 
 
-
-From the above scatterplot, we can see that there is no linear relationship between monthly income and monthly rate
+From the below scatterplot, we can see that there is no linear relationship between monthly income and monthly rate. There's a lot more people who are doing "good"=3 than "excellent"=4
 ```{r}
 ggplot(attrition,aes(x=MonthlyRate,y=MonthlyIncome,col=PerformanceRating))+
   geom_jitter(size=2)+
@@ -165,13 +176,351 @@ ggplot(attrition,aes(x=MonthlyRate,y=MonthlyIncome,col=PerformanceRating))+
 ```
 
 
-```{r}
-S=favstats(~attrition$JobInvolvement|attrition$Attrition)
-T=favstats(~attrition$JobSatisfaction|attrition$Attrition)
 
-ggplot(attrition,aes(x=BusinessTravel,fill=Attrition))+
-  geom_bar()+labs(y="Count",title="Attrition vs Business Travel")+scale_fill_brewer(palette = "Set2")
+
+##PCA
+
+Now the question we are trying to answer is whether we can group employees based on their age. In order to do this we shall use PCA and kmeans clustering.
+
+Before trying to cluster since there are a lot of variables lets try to reduce the number of variables through picking the most important ones, via subselection using random forest.
+
+change order of columns. We do this so that age is on the end as it is what we are trying to predict.
+```{r}
+attri2 <- attrition[,c(2:34,1)]
+#we get rid of over18 as the only output is Y for yes so it does not help us in anyway
+attri2 <- attri2[,-c(21)]
 ```
+
+We create a sample size for our random sampling via bootstrap
+```{r}
+sampleSize <- nrow(attrition)
+```
+
+This is our bootstrap function, its a form of random sampling, allowing us to cross validate our data and predictions using random forest
+```{r}
+mseBoot <- function(data.df,M=50){
+    mse <- rep(0,M)
+    for(m in 1:M){
+        bootSamp <- sample(1:sampleSize,sampleSize,rep=TRUE)
+        outOfBag <- setdiff(1:sampleSize,bootSamp)
+        train.df <- data.df[bootSamp,]
+        test.df <-   data.df[outOfBag,]
+        mod <- glm(Age~ .,data=train.df)
+        vals <- predict(mod,newdata=test.df)
+        mse[m] <- with(test.df,mean((Age-vals)^2))
+    }
+    mean(mse)
+}
+```
+
+Now we are setting up for our large loop that will do backward stepwise subset selection
+```{r}
+numPreds <- length(names(attri2))-1
+```
+
+```{r}
+allPreds <- 1:(numPreds)
+```
+
+```{r}
+currPreds <- c()
+```
+
+```{r}
+availPreds <- setdiff(allPreds,currPreds)
+length(availPreds)
+```
+
+```{r}
+maxPreds <- numPreds
+```
+
+```{r}
+minMSE <- numeric(maxPreds)
+```
+
+Okay everything is set up, to gothrough each of our predictors trying to fnd which variables give us the lowest MSE and saving that MSE in a list as well as the predictor used.
+
+Alright here we go, this may take a bit
+
+```{r}
+tot <- 0
+while( tot < maxPreds){
+    ##add predictor which decreases MSE (as determined by
+    ##Bootstrapping)
+    ## The MSEs computed as we add each of the available predictors
+    allMSE <- numeric(length(availPreds))
+    ctr<-1
+    for(id in availPreds){
+        data.df <- attri2[,c(currPreds,id,numPreds+1)]
+        mse <- mseBoot(data.df,30)
+        allMSE[ctr] <- mse
+        ctr<-ctr+1
+    }
+    ##Find the min
+    id <- which.min(allMSE)
+    ##get the best predictor and MSW
+    bestPred <- availPreds[id]
+    bestMSE <- min(allMSE)
+    ##Add these into the collection
+    currPreds <- c(currPreds,bestPred)
+    tot <-tot+1
+    minMSE[tot] <- bestMSE
+    availPreds <- setdiff(allPreds,currPreds)
+    ## Print stuff out for debugging and attention-grabbing
+    print(sprintf("Predictor Added: %s  MSE Value: %s",bestPred,bestMSE))
+    print(currPreds)
+}
+```
+ It works, so we can now look at MSE Plot
+
+```{r}
+data.frame(pred=1:maxPreds,minMSE) %>% 
+    ggplot()+
+    geom_point(aes(pred,minMSE))
+```
+
+We can see that we have our minimal MSE at around 8 predictors.
+
+We are now going to try to generate a plot to better illustrate the importance of our predctors.
+
+Lets take these names and put them in a list
+```{r}
+Titles <- names(attri2[,currPreds])
+```
+ 
+Here we are calculaing change in MSE
+```{r}
+diffMSE <- c(0,minMSE[-length(minMSE)]-minMSE[-1])
+head(diffMSE)
+```
+
+
+Lets put everything in a results dataframe
+```{r}
+result.df <- data.frame(id=1:length(Titles),Titles,minMSE,diffMSE=-10*diffMSE, predictors= currPreds)
+```
+
+
+and take a quick look
+```{r}
+head(result.df)
+```
+
+Lets plot our Decrease in MSE for our top 10 predictors
+```{r}
+cut <- 10
+ggplot(result.df %>%
+       filter(Titles %in% Titles[1:cut]))+
+    geom_segment(aes(x=1,xend=id,y=0,yend=0),size=.1,color="black")+
+    geom_segment(aes(x=id,xend=id,y=0,yend=minMSE),color="blue")+
+    geom_point(aes(x=id,y=minMSE),color="blue",size=1.5)+
+    geom_segment(aes(x=id,xend=id,y=0,yend=diffMSE),color="red")+
+    geom_point(aes(x=id,y=diffMSE),color="red",size=1.5)+
+    scale_x_continuous(breaks=1:length(Titles),label=Titles)+
+    coord_flip()+
+    ggtitle("Subset Selection: MSE Decrease")
+```
+
+These are the top 10 variables that can be used to predict someone's age based on the attrition dataset. The blue part shows the overall reduction in MSE whilst the red part shows the difference in MSE with the use of each variable.
+
+(something to note is that the plot is flipped)
+
+We can now use those variables in our PCA to see how different ages cluster together
+
+Lets filter our results dataframe so we are looking at our variables that gives us the lowest MSEs
+```{r}
+bestvars <- result.df[1:10,]
+```
+
+
+We put our best predictors to form our dataset for clusters and also take out ages from our original dataset.
+```{r}
+attri.df <- attrition[,bestvars$predictors]
+ages <- attrition$Age
+
+```
+Take a look
+```{r}
+head(attri.df)
+```
+
+Gender is non numerical which is going to give us issues later on so lets change that now to some 1s and 0s, if male = 1 if female =0. Also we will take out Age so it doesn't distort our clusters.
+
+```{r}
+attri.df <- attri.df %>%
+  mutate(Gender = ifelse(Gender=="Male",1,0))
+
+attri.df <- attri.df[,-c(7)]
+```
+
+Take another look
+```{r}
+head(attri.df)
+```
+
+Okay now lets try out our PCA with the plot
+
+```{r}
+attri.pca <- prcomp(attri.df)
+fviz_pca_biplot(attri.pca,repel=TRUE)
+```
+This is really intense and hard to understand, it seems like most of the variables fit into one dimension.
+
+Lets pull off the PCA information
+```{r}
+rots <- attri.pca$rotation
+```
+
+
+Rotate into the new basis.
+```{r}
+attri.pca1<- data.matrix(attri.df) %*% rots
+dim(attri.pca1)
+
+
+```
+
+
+The first three directions
+```{r}
+pca1 <- attri.pca1[,1]
+pca2 <- attri.pca1[,2]
+pca3 <- attri.pca1[,3]
+```
+
+
+##Add in K Means clustering to the Principal Components
+
+
+2 clusters, this is arbitrary
+```{r}
+K <- 2
+```
+
+
+run 30 times, allow up to 30  iterations for convergence
+```{r}
+attri.km <- kmeans(attri.df,K,iter.max=20,nstart=30)
+
+```
+
+
+Our clusters
+```{r}
+attri.km$cluster
+
+```
+
+
+Add the clusters to the data frame
+```{r}
+attri.df$cluster.km<- attri.km$cluster
+head(attri.df)
+
+```
+
+
+Look at one cluster
+What ages land where?
+```{r}
+
+attri.df$age <- attrition$Age
+filter(attri.df,cluster.km==1)%>%
+    dplyr::select(age)
+
+
+```
+
+
+What are the cluster sizes?
+```{r}
+with(attri.df,table(cluster.km))
+
+```
+
+
+Build the rotated data frame
+```{r}
+attriCluster.df <- data.frame(pca1,pca2,cluster=factor(attri.df$cluster.km),name=ages)
+
+```
+
+plot the cluster.pcas on top of the PCA first two components
+```{r}
+ggplot(sample(attriCluster.df, (nrow(attriCluster.df)/4), replace = FALSE),aes(pca1,pca2,color=cluster))+
+    geom_point(size=1)+
+    geom_text_repel(aes(label=name),size=3)+
+    ggtitle("Attrition Cluster Analsys and PCA")
+```
+We did a sample here because we saw how confusing the first plot was with the number of records, both clusters have a similiar number of ages. SO the plot does not say much. Lets take a look at the tables
+
+```{r}
+with(attri.df,table(ages, cluster.km))
+```
+Theres a pretty even distribution of ages between the clusters. So we probably need more clusters to seperate the clusters more. Also there are a few too many ages types so we may look into better categorizing those as well.
+
+
+Lets find the optimum number of clusters 
+```{r}
+fviz_nbclust(attri.df,kmeans,method="wss")
+```
+
+From the graph it looks like the optimum is 6 so we will cluster at 6 and see what that gives us
+
+Lets also better categorize ages so things make a bit more sense
+
+```{r}
+head(attri.df)
+levels(factor(attri.df$age))
+```
+
+
+Better catgerorizing age so its easier to look at
+```{r}
+attri.df <- attri.df %>%
+  mutate(age2 = ifelse(age <=20,"Teens",
+                       ifelse(age <=30, "20s",
+                              ifelse(age <= 40, "30s",
+                                     ifelse(age<= 50, "40s",
+                                            ifelse(age <= 60, "50s"))))))
+```
+
+Did it work
+```{r}
+levels(factor(attri.df$age2))
+```
+
+OKay now lets run everything and see our final clusters!!!
+```{r}
+K <- 6
+finattri.df <- attri.df[,-c(11,12)]
+attri.km <- kmeans(finattri.df,K,iter.max=20,nstart=30)
+attri.df$cluster.km<- attri.km$cluster
+with(attri.df,table(cluster.km))
+attriCluster.df <- data.frame(pca1,pca2,cluster=factor(attri.df$cluster.km),Age=factor(attri.df$age2))
+ggplot(sample(attriCluster.df, (nrow(attriCluster.df)/4), replace = FALSE),aes(pca1,pca2,color=cluster))+
+    geom_point(size=1)+
+    geom_text_repel(aes(label=Age),size=3)+
+    ggtitle("Attrition Cluster Analsys and PCA")
+```
+
+From the clusters it looks like age is not a very good variable for differentiating employees as there is a pretty even spread of ages between each cluster
+
+
+The table below better exemplifies this
+```{r}
+with(attriCluster.df,table(Age, cluster))
+```
+So we can conclude form the data, in this case Age itself does not seperate employee groups, as you can be similar to any other employee regardless of your age.
+
+
+
+
+
+
+
+
 
 
 
@@ -193,17 +542,10 @@ attrition$EmployeeCount <- NULL
 attrition$EmployeeNumber <- NULL
 attrition$StandardHours <- NULL
 attrition$Over18 <- NULL
+attrition$MonthlyIncome <- NULL
+attrition$MonthlyRate <- NULL
+
 ```
-
-##Regressions
-
-**Linear**
-```{r}
-names(attrition)
-mod.lin <- lm(Age~ DailyRate+DistanceFromHome+JobRole+YearsAtCompany,data=attrition)
-summary(mod.lin)
-```
-
 
 Split data into train and test train.
 ```{r}
@@ -214,29 +556,20 @@ test.df <- attrition[-train,]
 #names(train.df)
 ```
 
-**Logistic**
+#First we do Decision Tree
+
+Here, we are going to predict Atttrition using decision tree and see which variable is the most important in predicting whether or not someone will leave their job. 
 ```{r}
-mod.log <- glm(Attrition ~., family=binomial(link="logit"),data=train.df)
-summary(mod.log)
-```
-
-
-Decision Tree
-
-Here, we are gunna predict Atttrition using decision tree and see which variable is the most important in predicting whether or nott someone will leave their job. 
-
-```{r}
-mod.tree <- tree(Attrition~., data=train.df,control=tree.control(nrow(attrition),mindev = 0.01))
+mod.tree <- tree(Attrition~., data=train.df,control=tree.control(nrow(attrition),mindev = 0.0001))
 summary(mod.tree)
 ```
 
-
-Let's see the tree
+Let's see the tree. 
 ```{r}
 plot(mod.tree)
-text(mod.tree, pretty=0,cex=0.5)
+text(mod.tree, pretty=0,cex=0.3)
 ```
-Observation: Seems like some of the most important variable for Attrition are YearsAtCompany, PercentSalaryHike, YearsSinceLastPromotion, MonthlyRate. 
+Observation: Seems like some of the most important variable for Attrition are DistanceFromHome, Age, DailyRate. This tree is a little difficult to read, but let's make some predictions!
 
 Predict train data. how well was our train data?
 ```{r}
@@ -248,10 +581,9 @@ with(train.df,table(Attrition,preds.train))
 
 (err.train<- with(train.df,mean(Attrition!=preds.train)))
 ```
+Conclusion: Our train data was pretty good with error rate of 0.05792904. Of course this might change everytime we run the tree. 
 
-Conclusion: Our train data was pretty good with error rate of 0.09931973
-
-How about wih our test data?
+How about with our test data?
 ```{r}
 ##make some predictions with test data
 preds.test<- predict(mod.tree,newdata=test.df,type="class")
@@ -270,7 +602,7 @@ mod.tree2 <- tree(Attrition~.,data=train.df,
 (numLeaves <- sum(mod.tree2$frame$var =="<leaf>"))
 
 numFolds <- 25
-folds <- sample(1:numFolds,nrow(train.df),rep=T)
+folds <- sample(1:numFolds,nrow(train.df),rep=TRUE)
 
 err <- matrix(nrow=numLeaves,ncol=3)
 errCV <- numeric(numFolds)
@@ -305,7 +637,7 @@ data.frame(treeSize=2:numLeaves,
     scale_color_manual(values=c("red","blue","black"))
 
 ```
-Seems like test error did not change
+Seems like test error did not change at all. But mean cross-validation increase as treeSize increase which is good.
 
 Let's prune our tree! Single Cross validation for optimal size
 ```{r}
@@ -335,9 +667,7 @@ plot(mod.prune)
 text(mod.prune,pretty=0,cex=0.5)
 
 ```
-Observation: 
-
-Seems like the important variable for employees staying at their company is HourlyRate, RelationshipSatisfacion, YearsAtCompany, and EnvironmentSatisfication. 
+Observation: Seems like the important variable for employees staying at their company is HourlyRate, RelationshipSatisfacion, YearsAtCompany, and EnvironmentSatisfication. 
 
 Predict our prune model using the testing data. What do we find?
 ```{r}
@@ -351,12 +681,12 @@ with(test.df,table(Attrition,mod.pred.prune))
 ```
 
 
-##compare error rates from the tree and the pruned tree
+##compare error rates from the tree test and train errors and the pruned tree
 
 ```{r}
 c(err.train,err.test,err.prune.test)
 ```
-Looks like we did a better job finding the most important variable for predicting attrition when we pruned our tree and found the best size. 
+Looks like we did a better job finding the most important variable for predicting attrition when we pruned our tree and found the best size!! Nice!
 
 
 Let's predict our prune tree with out testing data set. How does it look?
@@ -368,7 +698,8 @@ hist(probs.prune[,1],breaks=25)
 
 ##Random Forest 
 
-Here we are going to perform some out of bag error. What does random forest say the most important variable for predicting Attriion. 
+Here we are going to perform some out of bag error with Random Forest!! What does random forest say the most important variable for predicting Attrition? How well? 
+
 ```{r}
 p <- ncol(train.df)-1
 mod.rf <- randomForest(Attrition~., data = train.df, ntree = 500, mtry = p,importance = TRUE)
@@ -393,24 +724,54 @@ Let's compare the error rates from our decision tree, prune tree, and the out of
 ```{r}
 c(err.test,err.prune.test,err.bag)
 ```
+Looks like randomForest is winning. Doing really well. 
 
 ```{r}
 plot(mod.rf)
 ```
+As we can see from above black line shows the error rate with OOB. It decreases as the number of trees increases and eventually stablized to a value.
 
 ```{r}
 importance(mod.rf)
 ```
 
+Below is a plot of the variable of importance for our MeanDecreaseGini,MeanDecreaseAccuracy. 
+It looks like the biggest and important variable for the mean decrease accuracy is overtime followed by MonthlyIncome then Age and JobRole. Next for the MeanDecreaseGini MonthlyIncome, DailyRate, Overtime, Age. 
 ```{r}
-varImpPlot(mod.rf)
+varImpPlot(mod.rf,
+           sort=TRUE,n.var=10,main="Top 10 Variable of Importance")
 ```
 
+Let's do Adaboost!
 ```{r}
 require(dplyr)
 attrition <- attrition %>%
       mutate(Attrition = ifelse(Attrition== "No",0,1))
  
+attrition$Education <- as.factor(attrition$Education)
+attrition$EnvironmentSatisfaction <- as.factor(attrition$EnvironmentSatisfaction)
+attrition$JobInvolvement <- as.factor(attrition$JobInvolvement)
+attrition$JobLevel <- as.factor(attrition$JobLevel)
+attrition$JobSatisfaction <- as.factor(attrition$JobSatisfaction)
+attrition$PerformanceRating <- as.factor(attrition$PerformanceRating)
+attrition$RelationshipSatisfaction <- as.factor(attrition$RelationshipSatisfaction)
+attrition$StockOptionLevel <- as.factor(attrition$StockOptionLevel)
+attrition$WorkLifeBalance <- as.factor(attrition$WorkLifeBalance)
+attrition$EducationField  <- as.factor(attrition$EducationField)
+attrition$Gender <- as.factor(attrition$Gender)
+attrition$JobRole<- as.factor(attrition$JobRole)
+attrition$MaritalStatus<- as.factor(attrition$MaritalStatus)
+attrition$OverTime<- as.factor(attrition$OverTime)
+attrition$BusinessTravel <- as.factor(attrition$BusinessTravel)
+attrition$Department <- as.factor(attrition$Department)
+
+attrition$EmployeeCount <- NULL
+attrition$EmployeeNumber <- NULL
+attrition$StandardHours <- NULL
+attrition$Over18 <- NULL
+attrition$MonthlyIncome <- NULL
+attrition$MonthlyRate <- NULL
+
 ```
 
 ```{r}
@@ -434,7 +795,7 @@ preds <-  probs > 0.5
 
 ## How does it look?
 with(attrition,table(Attrition,preds))
-with(attrition,mean(Attrition != preds))
+(err.gbm <- with(attrition,mean(Attrition != preds)))
 ```
 
  
@@ -453,252 +814,18 @@ data.frame(trees=1:numTrees,err=errTree) %>%
   geom_point(aes(trees,err))
 
 ```
+Looks good! 
 
+Let's compare all of our error rates together! err.test is decision trees, err.prune.test is prune tree, err.bag is random forest, err.gbm is adaboost. 
+```{r}
+c(err.test,err.prune.test,err.bag,err.gbm)
+
+```
+
+
+Let's look at the summary below. It looks like the JobRole is the top most important variable for predicting Attrition based on AdaBoost, Second is Overtime, Age, and DistanceFromHome are the other important variables. 
 ```{r}
 summary(att.gbm)
 ```
-
-
-##SVM, PCA, SVD, ADABoosting
-
-##PCA
-
-Before trying to cluster since there are a lot of variables lets try to reduce the number of variables through picking the most important ones
-
-change order of columns
-```{r}
-attri2 <- attrition[,c(2:34,1)]
-attri2 <- attri2[,-c(21)]
-```
-
-```{r}
-sampleSize <- nrow(attrition)
-```
-
-```{r}
-mseBoot <- function(data.df,M=50){
-    mse <- rep(0,M)
-    for(m in 1:M){
-        bootSamp <- sample(1:sampleSize,sampleSize,rep=T)
-        outOfBag <- setdiff(1:sampleSize,bootSamp)
-        train.df <- data.df[bootSamp,]
-        test.df <-   data.df[outOfBag,]
-        mod <- lm(Age~.,data=train.df)
-        vals <- predict(mod,newdata=test.df)
-        mse[m] <- with(test.df,mean((Age-vals)^2))
-    }
-    mean(mse)
-}
-```
-
-
-```{r}
-numPreds <- length(names(attri2))-1
-```
-
-```{r}
-allPreds <- 1:(numPreds)
-```
-
-```{r}
-currPreds <- c()
-```
-
-```{r}
-availPreds <- setdiff(allPreds,currPreds)
-length(availPreds)
-```
-
-```{r}
-maxPreds <- numPreds
-```
-
-```{r}
-minMSE <- numeric(maxPreds)
-```
-
-```{r}
-tot <- 0
-while( tot < maxPreds){
-    ##add predictor which decreases MSE (as determined by CV or
-    ##Bootstrapping)
-    ## The MSEs computed as we add each of the available predictors
-    allMSE <- numeric(length(availPreds))
-    ctr<-1
-    for(id in availPreds){
-        data.df <- attri2[,c(currPreds,id,numPreds+1)]
-        mse <- mseBoot(data.df,30)
-        allMSE[ctr] <- mse
-        ctr<-ctr+1
-    }
-    ##Find the min
-    id <- which.min(allMSE)
-    ##get the best predictor and MSW
-    bestPred <- availPreds[id]
-    bestMSE <- min(allMSE)
-    ##Add these into the collection
-    currPreds <- c(currPreds,bestPred)
-    tot <-tot+1
-    minMSE[tot] <- bestMSE
-    availPreds <- setdiff(allPreds,currPreds)
-    ## Print stuff out for debugging and attention-grabbing
-    print(sprintf("Predictor Added: %s  MSE Value: %s",bestPred,bestMSE))
-    print(currPreds)
-}
-```
- It works, so we can now look at MSE Plot
- 
-```{r}
-Titles <- names(attri2[,c(currPreds)])
-```
- 
-change in MSE
-```{r}
-diffMSE <- c(0,minMSE[-length(minMSE)]-minMSE[-1])
-head(diffMSE)
-```
-
-```{r}
-result.df <- data.frame(id=1:length(Titles),Titles,minMSE,diffMSE=-10*diffMSE, predictors= currPreds)
-```
-
-```{r}
-cut <- 10
-ggplot(result.df %>%
-       filter(Titles %in% Titles[1:cut]))+
-    geom_segment(aes(x=1,xend=id,y=0,yend=0),size=.1,color="black")+
-    geom_segment(aes(x=id,xend=id,y=0,yend=minMSE),color="blue")+
-    geom_point(aes(x=id,y=minMSE),color="blue",size=1.5)+
-    geom_segment(aes(x=id,xend=id,y=0,yend=diffMSE),color="red")+
-    geom_point(aes(x=id,y=diffMSE),color="red",size=1.5)+
-    scale_x_continuous(breaks=1:length(Titles),label=Titles)+
-    coord_flip()+
-    ggtitle("Subset Selection: MSE Decrease")
-```
-
-These are the top 10 variables that can be used to predict someone's age based on attrition dataset. The bluw part shows the overall reduction in MSE whilst the red part shows the difference in MSE with the use of each variable.
-
-We can now use those variables in our PCA to see how different ages cluster together
-
-```{r}
-result.df <- result.df %>%
-  filter(minMSE <= quantile(result.df$minMSE, 0.25))
-```
-
-
-```{r}
-attri <- attrition[,result.df$predictors]
-ages <- attri$Age
-attri.df <- attrition[,-2]
-attri.df <- data.frame(select_if(attri.df, is.numeric))
-```
-
-```{r}
-attri.pca <- prcomp(attri.df)
-fviz_pca_biplot(attri.pca,repel=TRUE)
-```
-This is really intense and hard to understand, it seems like most of the variables fit into one dimension, I'll try reducing the amount to see what we get.
-
-```{r}
-attri.pca2 <- prcomp(attri.df[,1:10])
-fviz_pca_biplot(attri.pca2,repel=TRUE)
-```
-
-Pull off the PCA information
-This is the change of basis matrix (V in the SVD)
-```{r}
-rots <- attri.pca$rotation
-```
-
-
-Rotate into the new basis.
-```{r}
-attri.pca1<- data.matrix(attri.df) %*% rots
-dim(attri.pca1)
-
-
-```
-
-
-The first three directions
-```{r}
-pca1 <- attri.pca1[,1]
-pca2 <- attri.pca1[,2]
-pca3 <- attri.pca1[,3]
-```
-
-
-##Add in K Means clustering to the Principal Components
-
-
-Five clusters, this is arbitrary
-```{r}
-K <- 5
-```
-
-
-run 30 times, allow up to 30  iterations for convergence
-```{r}
-attri.km <- kmeans(attri.df,K,iter.max=20,nstart=30)
-
-```
-
-
-Our clusters
-```{r}
-attri.km$cluster
-
-```
-
-
-Add the clusters to the data frame
-```{r}
-attri.df$cluster.km<- attri.km$cluster
-head(attri.df)
-
-```
-
-
-Look at one cluster
-Who are these players...any NBA fans out there?
-```{r}
-
-attri.df$age <- attrition$Age
-filter(attri.df,cluster.km==1)%>%
-    dplyr::select(age)
-
-
-```
-
-
-What are the cluster sizes?
-```{r}
-with(attri.df,table(cluster.km))
-
-```
-
-
-Build the rotated data frame
-```{r}
-attriCluster.df <- data.frame(pca1,pca2,cluster=factor(attri.df$cluster.km),name=ages)
-
-```
-
-
-plot the cluster.pcas on top of the PCA first two components
-```{r}
-ggplot(attriCluster.df,aes(pca1,pca2,color=cluster))+
-    geom_point(size=1)+
-    geom_text_repel(aes(label=name),size=3)+
-    ggtitle("Attrition Cluster Analsys and PCA")
-```
-
-
-```{r}
-with(attri.df,prop.table(table(ages, cluster.km)))
-with(attri.df, prop.table(table(age)))
-
-```
-
 
 
