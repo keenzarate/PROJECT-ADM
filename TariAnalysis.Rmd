@@ -20,6 +20,7 @@ library(dplyr)
 library(ggrepel)
 library(graphics)
 library(factoextra)
+library(gbm)
 ```
 
 ## Exploratory Data Analysis
@@ -241,13 +242,12 @@ This is our bootstrap function, its a form of random sampling, allowing us to cr
 mseBoot <- function(data.df,M=50){
     mse <- rep(0,M)
     for(m in 1:M){
-        bootSamp <- sample(1:sampleSize,sampleSize,rep=T)
+        bootSamp <- sample(1:sampleSize,sampleSize,rep=TRUE)
         outOfBag <- setdiff(1:sampleSize,bootSamp)
         train.df <- data.df[bootSamp,]
         test.df <-   data.df[outOfBag,]
-        p <- ncol(train.df)-1
-        mod.rf <- randomForest(Age~.,data=train.df,ntree = 500, mtry = p,importance = TRUE)
-        vals <- predict(mod.rf,newdata=test.df, ntree=500)
+        mod <- glm(Age~ .,data=train.df)
+        vals <- predict(mod,newdata=test.df)
         mse[m] <- with(test.df,mean((Age-vals)^2))
     }
     mean(mse)
@@ -314,21 +314,41 @@ while( tot < maxPreds){
 }
 ```
  It works, so we can now look at MSE Plot
- 
+
 ```{r}
-Titles <- names(attri2[,c(currPreds)])
+data.frame(pred=1:maxPreds,minMSE) %>% 
+    ggplot()+
+    geom_point(aes(pred,minMSE))
+```
+
+We can see that we have our minimal MSE at around 8 predictors.
+
+We are now going to try to generate a plot to better illustrate the importance of our predctors.
+
+Lets take these names and put them in a list
+```{r}
+Titles <- names(attri2[,currPreds])
 ```
  
-change in MSE
+Here we are calculaing change in MSE
 ```{r}
 diffMSE <- c(0,minMSE[-length(minMSE)]-minMSE[-1])
 head(diffMSE)
 ```
 
+
+Lets put everything in a results dataframe
 ```{r}
 result.df <- data.frame(id=1:length(Titles),Titles,minMSE,diffMSE=-10*diffMSE, predictors= currPreds)
 ```
 
+
+and take a quick look
+```{r}
+head(result.df)
+```
+
+Lets plot our Decrease in MSE for our top 10 predictors
 ```{r}
 cut <- 10
 ggplot(result.df %>%
@@ -343,27 +363,44 @@ ggplot(result.df %>%
     ggtitle("Subset Selection: MSE Decrease")
 ```
 
-These are the top 10 variables that can be used to predict someone's age based on attrition dataset. The bluw part shows the overall reduction in MSE whilst the red part shows the difference in MSE with the use of each variable.
+These are the top 10 variables that can be used to predict someone's age based on the attrition dataset. The blue part shows the overall reduction in MSE whilst the red part shows the difference in MSE with the use of each variable.
+
+(something to note is that the plot is flipped)
 
 We can now use those variables in our PCA to see how different ages cluster together
 
+Lets filter our results dataframe so we are looking at our variables that gives us the lowest MSEs
 ```{r}
-result.df <- result.df %>%
-  filter(minMSE <= quantile(result.df$minMSE, 0.25))
+bestvars <- result.df[1:10,]
 ```
 
 
-
+We put our best predictors to form our dataset for clusters and also take out ages from our original dataset.
 ```{r}
-attri.df <- attrition[,result.df$predictors]
+attri.df <- attrition[,bestvars$predictors]
 ages <- attrition$Age
-attri.df <- data.frame(select_if(attri.df, is.numeric))
-```
 
+```
+Take a look
 ```{r}
 head(attri.df)
 ```
 
+Gender is non numerical which is going to give us issues later on so lets change that now to some 1s and 0s, if male = 1 if female =0. Also we will take out Age so it doesn't distort our clusters.
+
+```{r}
+attri.df <- attri.df %>%
+  mutate(Gender = ifelse(Gender=="Male",1,0))
+
+attri.df <- attri.df[,-c(7)]
+```
+
+Take another look
+```{r}
+head(attri.df)
+```
+
+Okay now lets try out our PCA with the plot
 
 ```{r}
 attri.pca <- prcomp(attri.df)
@@ -371,8 +408,7 @@ fviz_pca_biplot(attri.pca,repel=TRUE)
 ```
 This is really intense and hard to understand, it seems like most of the variables fit into one dimension.
 
-Pull off the PCA information
-This is the change of basis matrix (V in the SVD)
+Lets pull off the PCA information
 ```{r}
 rots <- attri.pca$rotation
 ```
@@ -458,18 +494,20 @@ ggplot(sample(attriCluster.df, (nrow(attriCluster.df)/4), replace = FALSE),aes(p
     geom_text_repel(aes(label=name),size=3)+
     ggtitle("Attrition Cluster Analsys and PCA")
 ```
-
+We did a sample here because we saw how confusing the first plot was with the number of records, both clusters have a similiar number of ages. SO the plot does not say much. Lets take a look at the tables
 
 ```{r}
 with(attri.df,table(ages, cluster.km))
 ```
+Theres a pretty even distribution of ages between the clusters. So we probably need more clusters to seperate the clusters more. Also there are a few too many ages types so we may look into better categorizing those as well.
+
 
 Lets find the optimum number of clusters 
 ```{r}
 fviz_nbclust(attri.df,kmeans,method="wss")
 ```
 
-From the graph it looks like the optimum is 5 so we will cluster at 5 and see what that gives us
+From the graph it looks like the optimum is 6 so we will cluster at 6 and see what that gives us
 
 Lets also better categorize ages so things make a bit more sense
 
@@ -489,12 +527,16 @@ attri.df <- attri.df %>%
                                             ifelse(age <= 60, "50s"))))))
 ```
 
-
-
+Did it work
 ```{r}
-k <- 5
-attri.km <- kmeans(attri.df,K,iter.max=20,nstart=30)
-attri.km$cluster
+levels(factor(attri.df$age2))
+```
+
+OKay now lets run everything and see our final clusters!!!
+```{r}
+K <- 6
+finattri.df <- attri.df[,-c(11,12)]
+attri.km <- kmeans(finattri.df,K,iter.max=20,nstart=30)
 attri.df$cluster.km<- attri.km$cluster
 with(attri.df,table(cluster.km))
 attriCluster.df <- data.frame(pca1,pca2,cluster=factor(attri.df$cluster.km),Age=factor(attri.df$age2))
