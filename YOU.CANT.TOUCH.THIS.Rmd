@@ -47,14 +47,7 @@ ggplot(attrition,aes(x=Age,y=MonthlyIncome,col=EducationField))+
 
 #qplot(attrition$Age, log(attrition$MonthlyIncome), data = attrition, color = attrition$EducationField)
 ```
-The graphs above shows a positive relationship between age and monthly income across different kinds of educational fields.
-
-```{r}
-ggplot(attrition,aes(x=EducationField,y=MonthlyIncome,col=EducationField))+
-  geom_jitter(size=2)+
-  facet_grid(".~Gender")
-```
-
+The graphs above shows a positive relationship between age and monthly income across different kinds of educational fields. There seem to be a lot of people who are in the EducationField = "Life Sciences". 
 
 Here, we are curious to see how YearSinceLastPromotion and YearsWithCurrManager affect Attrition. 
 ```{r}
@@ -67,13 +60,11 @@ ggplot(attrition,
         theme(plot.title = element_text(hjust = 0.2))
 
 ```
-There does not seem to be any significant relationship between years since last promotion and years with current manager due to the random distribution shown in the plot:
 
-Observation: 
-
+Observation: The graph above shows that people who are not getting a promotion and they've worked are quitting their job. Seems like the years witht current manager could be a factor of how likely they are to leave. 
 
 
-
+Below is a graph on Attrition and NumCompaniesWorked. 
 ```{r}
 #Attrition vs Number of companies worked
 hase = ggplot(attrition, aes(x = Attrition, y = NumCompaniesWorked)) +
@@ -83,7 +74,6 @@ hase
 The boxplot above shows that most employees lost to attrition have worked fewer companies than those who are not.
 
 The graphs below suggests that the greater the distance from home the more likely it is for an employee to be lost through attrition.
-
 ```{r}
 require(ggthemes)
 ggplot(attrition,aes(DistanceFromHome,fill=Attrition))+
@@ -92,7 +82,9 @@ ggplot(attrition,aes(DistanceFromHome,fill=Attrition))+
   theme(legend.position="bottom",plot.title=element_text(hjust=0.5,size=16))+
   labs(x="Distance from Home",title="Attrition and Distance from Home")+scale_fill_brewer(palette = "Set2")
 ```
+Observation: Graph above shows that below who lives close are less likely to quite their job. 
 
+Below are boxplots on Attrition based on DailyRate, HourlyRate, Monthly Rate, Monthly Income. 
 ```{r}
 #Attition vs Daily Rate/Distance From Home/ Houtly Rate
 old.par = par()
@@ -106,11 +98,10 @@ with (attrition, {
 )
 ```
 
-
 From the boxplots above, it seems attrition is most significantly affected by the daily rate as those who faced attrition had a significantly lower mean for daily rate as opposed to those who did not. As for attrition by hourly rate and by monthly rate, there does not seem to be any significant difference in means.
 
 
-
+Below is graph on on Marital Status:
 ```{r}
 ggplot(attrition, aes(x=MaritalStatus)) +
   ggtitle("MaritalStatus") +
@@ -118,14 +109,8 @@ ggplot(attrition, aes(x=MaritalStatus)) +
   geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5,col="blue",fill="orange") +
   ylab("Percentage") +
   theme_minimal()
-
-
-ggplot(attrition,aes(x=WorkLifeBalance,y=MonthlyIncome,col=Department))+
-  geom_jitter(size=2)+
-  facet_grid(".~MaritalStatus")
 ```
-
-The boxplot suggests that Work and Life Balance are irrespective of marital status as the means across the three different marital groups are the same
+The bar graph above shows that there is a lot more married people working than single and divorced. 
 
 ```{r}
 #Job role vs percent salary hike
@@ -151,6 +136,7 @@ ggplot(attrition,aes(x=PercentSalaryHike,fill=Attrition))+
   geom_bar()+
   facet_grid(".~Gender")+scale_fill_brewer(palette = "Set2")
 ```
+There's a lot more males that are having percentsalaryhike it seems like in this data set. 
 
 How about attrition and monthlyIncome across gender?
 ```{r}
@@ -402,7 +388,6 @@ with(test.df,table(Attrition,preds.bag))
 (err.bag <- with(test.df,mean(Attrition!=preds.bag)))
 
 ```
-
 
 Let's compare the error rates from our decision tree, prune tree, and the out of bag error
 ```{r}
