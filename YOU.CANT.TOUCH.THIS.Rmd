@@ -2,11 +2,14 @@
 title: "YOU.CANT.TOUCH.THIS"
 author: "Keen,Obinna, Tari, Roo"
 date: "5/19/2019"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 Load packages here:
 ```{r}
+
 suppressMessages(library(ggrepel))
 suppressMessages(library(graphics))
 suppressMessages(library(factoextra))
@@ -38,7 +41,7 @@ library(gbm)
 Load the data. 
 ```{r}
 #Lets take a look at the data
-attrition = read.csv("WA_Fn-UseC_-HR-Employee-Attrition.csv")
+attrition = read_csv("WA_Fn-UseC_-HR-Employee-Attrition.csv")
 #View(attrition)
 ```
 
@@ -176,8 +179,6 @@ ggplot(attrition,aes(x=MonthlyRate,y=MonthlyIncome,col=PerformanceRating))+
 ```
 
 
-
-
 ##PCA
 
 Now the question we are trying to answer is whether we can group employees based on their age. In order to do this we shall use PCA and kmeans clustering.
@@ -243,7 +244,7 @@ Okay everything is set up, to gothrough each of our predictors trying to fnd whi
 
 Alright here we go, this may take a bit
 
-```{r}
+```{r warning=FALSE}
 tot <- 0
 while( tot < maxPreds){
     ##add predictor which decreases MSE (as determined by
@@ -336,8 +337,8 @@ bestvars <- result.df[1:10,]
 
 We put our best predictors to form our dataset for clusters and also take out ages from our original dataset.
 ```{r}
-attri.df <- attrition[,bestvars$predictors]
-ages <- attrition$Age
+attri.df <- attri2[,bestvars$predictors]
+ages <- attri2$Age
 
 ```
 Take a look
@@ -345,13 +346,10 @@ Take a look
 head(attri.df)
 ```
 
-Gender is non numerical which is going to give us issues later on so lets change that now to some 1s and 0s, if male = 1 if female =0. Also we will take out Age so it doesn't distort our clusters.
+Attrition is non numerical which is going to give us issues later on so lets change that now to some 1s and 0s, if Yes = 1 if No =0. Also we will take out Age so it doesn't distort our clusters.
 
 ```{r}
-attri.df <- attri.df %>%
-  mutate(Gender = ifelse(Gender=="Male",1,0))
-
-attri.df <- attri.df[,-c(7)]
+attri.df <- data.frame(select_if(attri.df, is.numeric))
 ```
 
 Take another look
@@ -494,7 +492,7 @@ levels(factor(attri.df$age2))
 OKay now lets run everything and see our final clusters!!!
 ```{r}
 K <- 6
-finattri.df <- attri.df[,-c(11,12)]
+finattri.df <- dplyr::select(attri.df, -age, -age2)
 attri.km <- kmeans(finattri.df,K,iter.max=20,nstart=30)
 attri.df$cluster.km<- attri.km$cluster
 with(attri.df,table(cluster.km))
@@ -517,16 +515,9 @@ So we can conclude form the data, in this case Age itself does not seperate empl
 
 
 
-
-
-
-
-
-
-
 Clean up data a little bit. Change variables to factors and remove variables that does not really help with the data. 
 ```{r}
-attrition <- data.frame(attrition)
+attrition <- read.csv("~/Desktop/PROJECT-ADM-master/ADM/WA_Fn-UseC_-HR-Employee-Attrition.csv")
 
 attrition$Education <- as.factor(attrition$Education)
 attrition$EnvironmentSatisfaction <- as.factor(attrition$EnvironmentSatisfaction)
@@ -596,7 +587,7 @@ Conclusion: Not bad, I think maybe we can do better?
 
 
 Here, we are gunna try with smaller mindev, how does err.test change?
-```{r}
+```{r warning=FALSE}
 mod.tree2 <- tree(Attrition~.,data=train.df,
                   control=tree.control(nrow(train.df),mindev=0.0000000))
 (numLeaves <- sum(mod.tree2$frame$var =="<leaf>"))
@@ -797,7 +788,6 @@ preds <-  probs > 0.5
 with(attrition,table(Attrition,preds))
 (err.gbm <- with(attrition,mean(Attrition != preds)))
 ```
-
  
 A quick look at the error as a function of the number of trees.
 ```{r}
@@ -829,3 +819,299 @@ summary(att.gbm)
 ```
 
 
+The error rate for all linear, polynomial and radial kernel seems to be 1
+
+
+```{r}
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(glmnet)
+library(FNN)
+library(randomForest)
+library(mlbench)
+library(devtools)
+install_github("seniorburito/ensemble")
+```
+# Ensembling
+
+Here we are trying to see if the numerical data in this dataset can help predict hourly pay rate of the employees, without considering categorical data such as the department, education field and etc. The numerical data include walking distance from home, self-reported job satisfcation on scale of 5, employee performance rating, and etc. 
+```{r}
+# dat <- as.data.frame(dat)
+# View(dat)
+
+
+attri.df <- attrition[,-2]
+attri.df <- data.frame(select_if(attri.df, is.numeric))
+#attri.df <- data.frame(scale(attri.df))
+#View(attri.df)
+
+train_inds <- sample(1:nrow(attri.df), floor(0.8*nrow(attri.df)), rep=F)
+train <- attri.df[train_inds,]
+test <- attri.df[-train_inds,]
+
+X_train <- dplyr::select(train, -HourlyRate)
+X_test <- dplyr::select(test, -HourlyRate)
+y_train <- train$HourlyRate
+y_test <- test$HourlyRate
+
+pred <- RooEnsemble::average_pred(X_train, y_train, X_test)
+err <- mean((pred-y_test)^2)
+err
+```
+We are using ensemble function that considers KNN, Random forest, LASSO, Ridge and linear models. The predictions from all the models are averaged. 
+
+The Mean Square Error for this is really bad. The hourly rate ranges around 90s and the mean square error is 400. If we look at how each model performed we see: 
+
+```{r}
+error_plot <- function(X_train, y_train, X_test, y_test, rfntree, KNNk, rfmtry, doKNN){
+  if(missing(rfntree)){
+    rfntree = 100
+  }
+  if(missing(KNNk)){
+    KNNk = 5
+  }
+  if(missing(rfmtry)){
+    rfmtry = 6
+  }
+  if(missing(doKNN)){
+    doKNN = TRUE
+  }
+  # Creating ridge and lasso sets
+  X_train_glmnet <- model.matrix(~.-1, data=X_train)
+  X_test_glmnet <- model.matrix(~.-1, data=X_test)
+  # LM
+  fit_lm <- glmnet(X_train_glmnet, y_train, alpha=0, lambda=c(0))
+  pred_lm <- predict(fit_lm, X_test_glmnet)[,1]
+  error_lm <- mean((pred_lm-y_test)^2)
+  # KNN
+  pred_knn <- knn.reg(X_train, test=X_test, y=y_train, k=KNNk)$pred
+  error_knn <- mean((pred_knn-y_test)^2)
+  # RF
+  fit_rf <- randomForest(x=X_train, y=y_train, ntree=rfntree, mtry = rfmtry)
+  pred_rf <- predict(fit_rf, X_test)
+  error_rf <- mean((pred_rf-y_test)^2)
+  # Ridge
+  fit_ridge <- cv.glmnet(X_train_glmnet, y_train, alpha=0)
+  pred_ridge <- predict(fit_ridge, X_test_glmnet, s='lambda.min')[,1]
+  error_ridge <- mean((pred_ridge-y_test)^2)
+  # LASSO
+  fit_lasso <- cv.glmnet(X_train_glmnet, y_train, alpha=1)
+  pred_lasso <- predict(fit_lasso, X_test_glmnet, s='lambda.min')[,1]
+  error_lasso <- mean((pred_lasso-y_test)^2)
+
+  # Computing average
+  if(doKNN){
+    avg_preds <- rowMeans(matrix(c(pred_lm, pred_knn, pred_rf, pred_ridge, pred_lasso),ncol=5))
+    error_avg <- mean((avg_preds-y_test)^2)
+    results <- data.frame(Model=c('LM','KNN','RF','Ridge','LASSO','Average'),
+                          MSE=c(error_lm, error_knn, error_rf, error_ridge, error_lasso, error_avg))
+    ggplot(results, aes(x=fct_reorder(Model, MSE), y=MSE))+
+      geom_col(fill='red')+
+      ggtitle('Comparing model performance')
+  }
+  else{
+    avg_preds <- rowMeans(matrix(c(pred_lm, pred_rf, pred_ridge, pred_lasso),ncol=4))
+    error_avg <- mean((avg_preds-y_test)^2)
+    results <- data.frame(Model=c('LM','RF','Ridge','LASSO','Average'),
+                          MSE=c(error_lm, error_rf, error_ridge, error_lasso, error_avg))
+    ggplot(results, aes(x=fct_reorder(Model, MSE), y=MSE))+
+      geom_col(fill='red')+
+      ggtitle('Comparing model performance')
+  }
+}
+
+error_plot(X_train, y_train, X_test, y_test, doKNN = TRUE)
+```
+Unsurprisingly, KNN is worse than the other models when considering so many predictors. We can remove KNN from the model, and see how that changes the MSE:
+
+```{r}
+pred <- RooEnsemble::average_pred(X_train, y_train, X_test, doKNN = FALSE)
+err <- mean((pred-y_test)^2)
+err
+``` 
+This is better, but not by a lot. The MSE is still high. What if we cross-validate this? Implementing this into the ensemble package was not successful, so we are just going to hard code this: 
+
+```{r}
+
+#LM
+fit_lm <- lm(HourlyRate~., data=train)
+pred_lm <- predict(fit_lm, test)
+error_lm <- mean((pred_lm-y_test)^2)
+
+numFolds<-15
+N<-nrow(train)
+folds<-sample(1:numFolds,N,replace=TRUE)
+  
+mseKFold<-numeric(numFolds)
+  for(fold in 1:numFolds){
+    X_train_glmnet  <- train[folds != fold,]
+    X_test_glmnet   <- train[folds == fold,]
+    fit_lm <- lm(HourlyRate~., data=X_train_glmnet)
+    pred_lm <- predict(fit_lm, X_test_glmnet) 
+    mseKFold[fold] <- with(X_test_glmnet,mean((HourlyRate-pred_lm)^2))
+  }
+(mse.kfold <- mean(mseKFold))
+
+
+# RandomForest
+fit_rf <- randomForest(HourlyRate~., data=train, ntree=200)
+pred_rf <- predict(fit_rf, test)
+error_rf <- mean((pred_rf-y_test)^2)
+
+numFolds<-5
+N<-nrow(train)
+folds<-sample(1:numFolds,N,replace=TRUE)
+  
+mseKFold.RF<-numeric(numFolds)
+  for(fold in 1:numFolds){
+    X_train_glmnet  <- train[folds != fold,]
+    X_test_glmnet   <- train[folds == fold,]
+    fit_rf <- randomForest(HourlyRate~., data=X_train_glmnet, ntree=200)
+    pred_rf <- predict(fit_rf, X_test_glmnet)
+    mseKFold.RF[fold] <- with(X_test_glmnet,mean((HourlyRate-pred_rf)^2))
+  }
+(mse.kfold <- mean(mseKFold.RF))
+
+
+# Ridge
+fit_ridge <- cv.glmnet(model.matrix(HourlyRate~.-1, data=train), y_train, alpha=0)
+pred_ridge <- predict(fit_ridge, model.matrix(HourlyRate~.-1, data=test), s='lambda.min')[,1]
+error_ridge <- mean((pred_ridge-y_test)^2)
+
+
+numFolds<-5
+N<-nrow(train)
+folds<-sample(1:numFolds,N,replace=TRUE)
+  
+mseKFold.R<-numeric(numFolds)
+  for(fold in 1:numFolds){
+    X_train_glmnet  <- train[folds != fold,]
+    X_test_glmnet   <- train[folds == fold,]
+    fit_ridge <- cv.glmnet(model.matrix(HourlyRate~.-1, data=train), y_train, alpha=0)
+   pred_ridge <- predict(fit_ridge, model.matrix(HourlyRate~.-1, data=test), s='lambda.min')[,1]
+    mseKFold.RF[fold] <- with(X_test_glmnet,mean((pred_ridge-y_test)^2))
+  }
+(mse.kfold <- mean(mseKFold.R))
+
+
+# LASSO
+fit_lasso <- cv.glmnet(model.matrix(HourlyRate~.-1, data=train), y_train, alpha=1)
+pred_lasso <- predict(fit_lasso, model.matrix(HourlyRate~.-1, data=test), s='lambda.min')[,1]
+error_lasso <- mean((pred_lasso-y_test)^2)
+
+numFolds<-5
+N<-nrow(train)
+folds<-sample(1:numFolds,N,replace=TRUE)
+  
+mseKFold.R<-numeric(numFolds)
+  for(fold in 1:numFolds){
+    X_train_glmnet  <- train[folds != fold,]
+    X_test_glmnet   <- train[folds == fold,]
+    fit_lasso <- cv.glmnet(model.matrix(HourlyRate~.-1, data=train), y_train, alpha=1)
+   pred_lasso <- predict(fit_lasso, model.matrix(HourlyRate~.-1, data=test), s='lambda.min')[,1]
+    mseKFold.RF[fold] <- with(X_test_glmnet,mean((pred_lasso-y_test)^2))
+  }
+(mse.kfold <- mean(mseKFold.R))
+
+```
+The results do not make a lot of sense. For linear model and random forest, the mean square error is higher, which should be lower, but for Ridge and Lasso, the mse is way too low. 
+
+Overall, such high MSE suggests that these are not good predictors for hourly rate of employees.
+
+
+```{r}
+attrition <- read.csv("~/Desktop/PROJECT-ADM-master/ADM/WA_Fn-UseC_-HR-Employee-Attrition.csv")
+data.df <- mutate(attrition,
+               Attrition=ifelse(Attrition=="Yes",1, ifelse(Attrition=="No",0,2)))
+head(data.df)
+data.df <- attrition[ -c(9,10,22,27)]
+```
+
+```{r}
+# Separate data into train and test set
+nr <- nrow(data.df)
+set.seed(330)
+train <- sample(1:nr, nr/2, rep=F)
+train.df <- data.df[train,]
+test.df <- data.df[-train,]
+sampleSize <- nrow(data.df)
+```
+
+
+#SVM with Linear Kernel
+```{r}
+library(e1071)
+theCost <- .05
+svm.linear <- svm(Attrition~.,
+               data=train.df,
+               kernel="linear",
+               cost=theCost,
+               scale=F)
+# Make prediction using our linear kernel SVM on the test data
+pred.linear <- predict(svm.linear, newdata = test.df)
+# Error Rate
+(error.svm.linear <- with(test.df, mean(Attrition != pred.linear)))
+```
+Error rate is 1
+#SVM with Polynomial Kernel
+```{r}
+# Tune our SVM with a Polynomial Kernel to obtain the best parameters
+tune.poly <- tune(svm, Attrition~., 
+                    data = train.df,
+                    kernel = "polynomial",
+                    scale = T,
+                    ranges=list(cost=10^seq(-3,3,length=10), degree=seq(1,5)),
+                    tunecontrol=tune.control(cross=3))
+C <- tune.poly$best.parameters[1]
+D <- tune.poly$best.parameters[2]
+# Re-run SVM with optimized parameters
+svm.poly <- svm(Attrition~.,
+                  data = train.df, 
+                  kernel = "polynomial",
+                  scale = T,
+                  cost = C,
+                  degree = D,
+                  decision.values=T)
+# Make prediction using our polynomia kernel SVM on the test data
+pred.poly <- predict(svm.poly, newdata = test.df)
+# Error Rate
+(error.svm.poly <-  with(test.df, mean(Attrition != pred.poly)))
+```
+#SVM with Radial Kernel
+```{r}
+# Tune our SVM with a Linear Kernel to obtain the best parameters
+tune.radial <- tune(svm, Attrition~., 
+                  data = train.df,
+                  kernel = "radial",
+                  scale = T,
+                  ranges=list(cost=10^seq(-3,3,length=10), gamma=10^seq(-3,3)),
+                  tunecontrol=tune.control(cross=3))
+C <- tune.radial$best.parameters[1]
+G <- tune.radial$best.parameters[2]
+# Re-run with new parameters
+svm.radial <- svm(Attrition~.,
+                data = train.df, 
+                kernel = "radial",
+                scale = T,
+                cost = C,
+                gamma = G,
+                decision.values=T)
+# Predict with Radial Kernel
+pred.radial <- predict(svm.radial, newdata = test.df)
+# Error Rate
+(error.svm.radial <- with(test.df, mean(Attrition != pred.radial)))
+```
+
+
+
+
+
+Conclusion: In terms of clustering using PSA we can conclude from the data, in this case Age itself does not seperate employee groups, as you can be similar to any other employee regardless of your age. In terms of assessing with algorithm is best in predicting Attrition, in this case, we used Decision Trees, Pruned Tree, RandomForest, AdaBoost. AdaBoost is one of the best algorithm to make a prediction on Attrition with an error rate of 0.0748 and RandomForest is the second best in predicting. 
+
+Using svm, the results were inconclusive. The error rates, for all types of svm i.e linear, polynomial and radial was one which could be because of the parameters we set.
+
+Using ensemble, the resuls showed that numerical predictors from this dataset are not a good at predicting hourly pay rate. 
+```{r}
+c(err.test,err.prune.test,err.bag,err.gbm)
+```
