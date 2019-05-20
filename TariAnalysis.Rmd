@@ -242,8 +242,8 @@ mseBoot <- function(data.df,M=50){
         outOfBag <- setdiff(1:sampleSize,bootSamp)
         train.df <- data.df[bootSamp,]
         test.df <-   data.df[outOfBag,]
-        mod <- lm(Age~.,data=train.df)
-        vals <- predict(mod,newdata=test.df)
+        mod.rf <- randomForest(Age~.,data=train.df,ntree = 500, mtry = p,importance = TRUE)
+        vals <- predict(mod.rf,newdata=test.df, ntree=500)
         mse[m] <- with(test.df,mean((Age-vals)^2))
     }
     mean(mse)
@@ -347,9 +347,8 @@ result.df <- result.df %>%
 
 
 ```{r}
-attri <- attrition[,result.df$predictors]
-ages <- attri$Age
-attri.df <- attrition[,-2]
+attri.df <- attrition[,result.df$predictors]
+ages <- attrition$Age
 attri.df <- data.frame(select_if(attri.df, is.numeric))
 ```
 
@@ -358,11 +357,6 @@ attri.pca <- prcomp(attri.df)
 fviz_pca_biplot(attri.pca,repel=TRUE)
 ```
 This is really intense and hard to understand, it seems like most of the variables fit into one dimension, I'll try reducing the amount to see what we get.
-
-```{r}
-attri.pca2 <- prcomp(attri.df[,1:10])
-fviz_pca_biplot(attri.pca2,repel=TRUE)
-```
 
 Pull off the PCA information
 This is the change of basis matrix (V in the SVD)
@@ -391,9 +385,9 @@ pca3 <- attri.pca1[,3]
 ##Add in K Means clustering to the Principal Components
 
 
-Five clusters, this is arbitrary
+2 clusters, this is arbitrary
 ```{r}
-K <- 5
+K <- 2
 ```
 
 
@@ -420,7 +414,7 @@ head(attri.df)
 
 
 Look at one cluster
-Who are these players...any NBA fans out there?
+What ages land where?
 ```{r}
 
 attri.df$age <- attrition$Age
@@ -447,7 +441,7 @@ attriCluster.df <- data.frame(pca1,pca2,cluster=factor(attri.df$cluster.km),name
 
 plot the cluster.pcas on top of the PCA first two components
 ```{r}
-ggplot(attriCluster.df,aes(pca1,pca2,color=cluster))+
+ggplot(sample(attriCluster.df, (nrow(attriCluster.df)/4), replace = FALSE),aes(pca1,pca2,color=cluster))+
     geom_point(size=1)+
     geom_text_repel(aes(label=name),size=3)+
     ggtitle("Attrition Cluster Analsys and PCA")
@@ -455,10 +449,34 @@ ggplot(attriCluster.df,aes(pca1,pca2,color=cluster))+
 
 
 ```{r}
-with(attri.df,prop.table(table(ages, cluster.km)))
-with(attri.df, prop.table(table(age)))
-
+with(attri.df,table(ages, cluster.km))
 ```
 
+Lets find the optimum number of clusters 
+```{r}
+fviz_nbclust(attri.df,kmeans,method="wss")
+```
+
+From the graph it looks like the optimum is 5 so we will cluster at 5 and see what that gives us
+
+```{r}
+k <- 5
+attri.km <- kmeans(attri.df,K,iter.max=20,nstart=30)
+attri.km$cluster
+attri.df$cluster.km<- attri.km$cluster
+with(attri.df,table(cluster.km))
+attriCluster.df <- data.frame(pca1,pca2,cluster=factor(attri.df$cluster.km),Age=ages)
+ggplot(attriCluster.df,aes(pca1,pca2,color=cluster))+
+    geom_point(size=1)+
+    geom_text_repel(aes(label=name),size=3)+
+    ggtitle("Attrition Cluster Analsys and PCA")
+```
+
+From the clusters it looks like age is not a very good variable for differentiating employees as there is a pretty even spread of ages between each cluster
 
 
+The table below better exemplifies this
+```{r}
+with(attriCluster.df,table(Age, cluster))
+```
+So we can conclude form the data, in this case Age itself does not seperate employee groups, as you can be similar to any other employee regardless of your age.
