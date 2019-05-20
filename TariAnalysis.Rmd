@@ -220,20 +220,23 @@ summary(mod.log)
 
 ##PCA
 
-Before trying to cluster since there are a lot of variables lets try to reduce the number of variables through picking the most important ones
+Now the question we are trying to answer is whether we can group employees based on their age. In order to do this we shall use PCA and kmeans clustering.
 
-change order of columns
+Before trying to cluster since there are a lot of variables lets try to reduce the number of variables through picking the most important ones, via subselection using random forest.
+
+change order of columns. We do this so that age is on the end as it is what we are trying to predict.
 ```{r}
 attri2 <- attrition[,c(2:34,1)]
+#we get rid of over18 as the only output is Y for yes so it does not help us in anyway
 attri2 <- attri2[,-c(21)]
 ```
 
-
+We create a sample size for our random sampling via bootstrap
 ```{r}
 sampleSize <- nrow(attrition)
 ```
 
-
+This is our bootstrap function, its a form of random sampling, allowing us to cross validate our data and predictions using random forest
 ```{r}
 mseBoot <- function(data.df,M=50){
     mse <- rep(0,M)
@@ -242,6 +245,7 @@ mseBoot <- function(data.df,M=50){
         outOfBag <- setdiff(1:sampleSize,bootSamp)
         train.df <- data.df[bootSamp,]
         test.df <-   data.df[outOfBag,]
+        p <- ncol(train.df)-1
         mod.rf <- randomForest(Age~.,data=train.df,ntree = 500, mtry = p,importance = TRUE)
         vals <- predict(mod.rf,newdata=test.df, ntree=500)
         mse[m] <- with(test.df,mean((Age-vals)^2))
@@ -250,7 +254,7 @@ mseBoot <- function(data.df,M=50){
 }
 ```
 
-
+Now we are setting up for our large loop that will do backward stepwise subset selection
 ```{r}
 numPreds <- length(names(attri2))-1
 ```
@@ -276,10 +280,14 @@ maxPreds <- numPreds
 minMSE <- numeric(maxPreds)
 ```
 
+Okay everything is set up, to gothrough each of our predictors trying to fnd which variables give us the lowest MSE and saving that MSE in a list as well as the predictor used.
+
+Alright here we go, this may take a bit
+
 ```{r}
 tot <- 0
 while( tot < maxPreds){
-    ##add predictor which decreases MSE (as determined by CV or
+    ##add predictor which decreases MSE (as determined by
     ##Bootstrapping)
     ## The MSEs computed as we add each of the available predictors
     allMSE <- numeric(length(availPreds))
@@ -353,10 +361,15 @@ attri.df <- data.frame(select_if(attri.df, is.numeric))
 ```
 
 ```{r}
+head(attri.df)
+```
+
+
+```{r}
 attri.pca <- prcomp(attri.df)
 fviz_pca_biplot(attri.pca,repel=TRUE)
 ```
-This is really intense and hard to understand, it seems like most of the variables fit into one dimension, I'll try reducing the amount to see what we get.
+This is really intense and hard to understand, it seems like most of the variables fit into one dimension.
 
 Pull off the PCA information
 This is the change of basis matrix (V in the SVD)
@@ -438,7 +451,6 @@ attriCluster.df <- data.frame(pca1,pca2,cluster=factor(attri.df$cluster.km),name
 
 ```
 
-
 plot the cluster.pcas on top of the PCA first two components
 ```{r}
 ggplot(sample(attriCluster.df, (nrow(attriCluster.df)/4), replace = FALSE),aes(pca1,pca2,color=cluster))+
@@ -459,16 +471,36 @@ fviz_nbclust(attri.df,kmeans,method="wss")
 
 From the graph it looks like the optimum is 5 so we will cluster at 5 and see what that gives us
 
+Lets also better categorize ages so things make a bit more sense
+
+```{r}
+head(attri.df)
+levels(factor(attri.df$age))
+```
+
+
+Better catgerorizing age so its easier to look at
+```{r}
+attri.df <- attri.df %>%
+  mutate(age2 = ifelse(age <=20,"Teens",
+                       ifelse(age <=30, "20s",
+                              ifelse(age <= 40, "30s",
+                                     ifelse(age<= 50, "40s",
+                                            ifelse(age <= 60, "50s"))))))
+```
+
+
+
 ```{r}
 k <- 5
 attri.km <- kmeans(attri.df,K,iter.max=20,nstart=30)
 attri.km$cluster
 attri.df$cluster.km<- attri.km$cluster
 with(attri.df,table(cluster.km))
-attriCluster.df <- data.frame(pca1,pca2,cluster=factor(attri.df$cluster.km),Age=ages)
-ggplot(attriCluster.df,aes(pca1,pca2,color=cluster))+
+attriCluster.df <- data.frame(pca1,pca2,cluster=factor(attri.df$cluster.km),Age=factor(attri.df$age2))
+ggplot(sample(attriCluster.df, (nrow(attriCluster.df)/4), replace = FALSE),aes(pca1,pca2,color=cluster))+
     geom_point(size=1)+
-    geom_text_repel(aes(label=name),size=3)+
+    geom_text_repel(aes(label=Age),size=3)+
     ggtitle("Attrition Cluster Analsys and PCA")
 ```
 
