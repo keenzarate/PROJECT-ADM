@@ -27,21 +27,166 @@ Load the data.
 ```{r}
 #Lets take a look at the data
 attrition = read.csv("WA_Fn-UseC_-HR-Employee-Attrition.csv")
+attrition <- as.data.frame(attrition)
 #View(attrition)
 ```
 
 What does the MonthlyIncome look like?
 ```{r}
 #Check for missing values
-ggplot(attrition, aes(x = MonthlyIncome)) + geom_histogram()
+ggplot(attrition, aes(x = MonthlyIncome)) + geom_histogram()  
 ```
 Histogram shows the distribution of monthly income in our dataset. The histogram is left skewed therefore we see that monthly income. Seems like most have MonthlyIncome around 2000. 
 
 
 ```{r}
-qplot(attrition$Age, log( attrition$MonthlyIncome), data = attrition, color = attrition$EducationField)
+
+ggplot(attrition,aes(x=Age,y=MonthlyIncome,col=EducationField))+
+  geom_jitter(size=2)+
+  facet_grid(".~Gender")
+
+#qplot(attrition$Age, log(attrition$MonthlyIncome), data = attrition, color = attrition$EducationField)
 ```
 The graphs above shows a positive relationship between age and monthly income across different kinds of educational fields.
+
+```{r}
+ggplot(attrition,aes(x=EducationField,y=MonthlyIncome,col=EducationField))+
+  geom_jitter(size=2)+
+  facet_grid(".~Gender")
+```
+
+
+Here, we are curious to see how YearSinceLastPromotion and YearsWithCurrManager affect Attrition. 
+```{r}
+ggplot(attrition, 
+        aes(y = YearsSinceLastPromotion, x = YearsWithCurrManager, colour = OverTime)) + 
+        geom_jitter(size = 1, alpha = 0.9) + 
+         geom_smooth(method = "gam") + 
+        facet_wrap(~ Attrition) + 
+        ggtitle("Attrition") + scale_color_brewer(palette="Dark2") + theme_minimal()+
+        theme(plot.title = element_text(hjust = 0.2))
+
+```
+There does not seem to be any significant relationship between years since last promotion and years with current manager due to the random distribution shown in the plot:
+
+Observation: 
+
+
+
+
+```{r}
+#Attrition vs Number of companies worked
+hase = ggplot(attrition, aes(x = Attrition, y = NumCompaniesWorked)) +
+  geom_boxplot()
+hase
+```
+The boxplot above shows that most employees lost to attrition have worked fewer companies than those who are not.
+
+The graphs below suggests that the greater the distance from home the more likely it is for an employee to be lost through attrition.
+
+```{r}
+require(ggthemes)
+ggplot(attrition,aes(DistanceFromHome,fill=Attrition))+
+  geom_density(alpha=0.5)+
+  theme_few()+
+  theme(legend.position="bottom",plot.title=element_text(hjust=0.5,size=16))+
+  labs(x="Distance from Home",title="Attrition and Distance from Home")+scale_fill_brewer(palette = "Set2")
+```
+
+```{r}
+#Attition vs Daily Rate/Distance From Home/ Houtly Rate
+old.par = par()
+par(mfrow = c(1,4))
+with (attrition, {
+  boxplot(attrition$DailyRate ~ attrition$Attrition, xlab = "Attrition by Daily Rate")
+  boxplot(attrition$HourlyRate ~ attrition$Attrition, xlab = "Attrition by Hourly Rate")
+  boxplot(attrition$MonthlyRate ~ attrition$Attrition, xlab = "Attrition by Monthly Rate")
+  boxplot(attrition$MonthlyIncome ~ attrition$Attrition, xlab = "Attrition by Monthly Income")
+}
+)
+```
+
+
+From the boxplots above, it seems attrition is most significantly affected by the daily rate as those who faced attrition had a significantly lower mean for daily rate as opposed to those who did not. As for attrition by hourly rate and by monthly rate, there does not seem to be any significant difference in means.
+
+
+
+```{r}
+ggplot(attrition, aes(x=MaritalStatus)) +
+  ggtitle("MaritalStatus") +
+  xlab("MaritalStatus") + 
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5,col="blue",fill="orange") +
+  ylab("Percentage") +
+  theme_minimal()
+
+
+ggplot(attrition,aes(x=WorkLifeBalance,y=MonthlyIncome,col=Department))+
+  geom_jitter(size=2)+
+  facet_grid(".~MaritalStatus")
+```
+
+The boxplot suggests that Work and Life Balance are irrespective of marital status as the means across the three different marital groups are the same
+
+```{r}
+#Job role vs percent salary hike
+ggplot(attrition,aes(x=JobRole,y=PercentSalaryHike,col=JobRole))+geom_jitter(size=1)
+
+Haha = favstats(~attrition$PercentSalaryHike|attrition$JobRole)
+
+bwplot(attrition$PercentSalaryHike ~ attrition$JobRole, data=attrition)
+
+#attrition vs percent salary hike
+Hehe = favstats(~attrition$PercentSalaryHike|attrition$Attrition)
+
+bwplot(attrition$PercentSalaryHike ~ attrition$Attrition, data=attrition)
+
+#Gender by Montly Income
+bwplot(attrition$MonthlyIncome ~ attrition$Gender, data=attrition)
+```
+Based on the tables above, Percent Salary Hike is independent of Job Role and is not a major factor in determining attrition as the means are almost the same between those employees lost to attrition and those not.
+
+Looking into attrition and percentsalaryhike accross genders
+```{r}
+ggplot(attrition,aes(x=PercentSalaryHike,fill=Attrition))+
+  geom_bar()+
+  facet_grid(".~Gender")+scale_fill_brewer(palette = "Set2")
+```
+
+How about attrition and monthlyIncome across gender?
+```{r}
+ggplot(attrition,aes(y=MonthlyIncome,x=Attrition,col=MonthlyIncome))+
+  geom_jitter(size=2)+
+  facet_grid(".~Gender") 
+```
+
+It is also interesting from the Monthly income by gender boxplot that both men and women seem to be earning roughly the same amount which is usually not the case.
+
+
+How about attrition and EnvironmentSatisfaction across gender?
+```{r}
+ggplot(attrition,aes(x=EnvironmentSatisfaction,fill=Attrition))+
+  geom_bar()+
+  facet_grid(".~Gender")+scale_fill_brewer(palette = "Set2")
+```
+
+
+
+From the above scatterplot, we can see that there is no linear relationship between monthly income and monthly rate
+```{r}
+ggplot(attrition,aes(x=MonthlyRate,y=MonthlyIncome,col=PerformanceRating))+
+  geom_jitter(size=2)+
+  facet_grid(".~PerformanceRating")
+```
+
+
+```{r}
+S=favstats(~attrition$JobInvolvement|attrition$Attrition)
+T=favstats(~attrition$JobSatisfaction|attrition$Attrition)
+
+ggplot(attrition,aes(x=BusinessTravel,fill=Attrition))+
+  geom_bar()+labs(y="Count",title="Attrition vs Business Travel")+scale_fill_brewer(palette = "Set2")
+```
+
 
 
 Clean up data a little bit. Change variables to factors and remove variables that does not really help with the data. 
@@ -64,138 +209,13 @@ attrition$StandardHours <- NULL
 attrition$Over18 <- NULL
 ```
 
-
-```{r}
-# Years since last promotion vs Years with current manager
-qplot(YearsSinceLastPromotion, YearsWithCurrManager, data = attrition)
-```
-There does not seem to be any significant relationship between years since last promotion and years with current manager due to the random distribution shown in the plot
-
-```{r}
-#Attrition vs Number of companies worked
-hase = ggplot(attrition, aes(x = Attrition, y = NumCompaniesWorked)) +
-  geom_boxplot()
-hase
-```
-The boxplot above shows that most employees lost to attrition have worked fewer companies than those who are not.
-
-The graphs below suggests that the greater the distance from home the more likely it is for an employee to be lost through attrition.
-
-```{r}
-require(ggthemes)
-ggplot(attrition,aes(DistanceFromHome,fill=Attrition))+
-  geom_density(alpha=0.5)+
-  theme_few()+
-  theme(legend.position="bottom",plot.title=element_text(hjust=0.5,size=16))+
-  labs(x="Distance from Home",title="Attrition and Distance from Home")
-```
-
-```{r}
-#Attition vs Daily Rate/Distance From Home/ Houtly Rate
-old.par = par()
-par(mfrow = c(1,3))
-with (attrition, {
-  boxplot(attrition$DailyRate ~ attrition$Attrition, xlab = "Attrition by Daily Rate")
-  boxplot(attrition$HourlyRate ~ attrition$Attrition, xlab = "Attrition by Hourly Rate")
-  boxplot(attrition$MonthlyRate ~ attrition$Attrition, xlab = "Attrition by Monthly Rate")
-}
-)
-```
-
-From the boxplots above, it seems attrition is most significantly affected by the daily rate as those who faced attrition had a significantly lower mean for daily rate as opposed to those who did not. As for attrition by hourly rate and by monthly rate, there does not seem to be any significant difference in means.
-
-```{r}
-#Work Life Balance vs Status
-gaal = ggplot(attrition, aes(x = MaritalStatus, y = WorkLifeBalance)) + geom_boxplot()
-gaal
-```
-
-The boxplot suggests that Work and Life Balance are irrespective of marital status as the means across the three different marital groups are the same
-
-```{r}
-#Job role vs percent salary hike
-Haha = favstats(~attrition$PercentSalaryHike|attrition$JobRole)
-
-bwplot(attrition$PercentSalaryHike ~ attrition$JobRole, data=attrition)
-
-#attrition vs percent salary hike
-Hehe = favstats(~attrition$PercentSalaryHike|attrition$Attrition)
-bwplot(attrition$PercentSalaryHike ~ attrition$Attrition, data=attrition)
-
-#Gender by Montly Income
-bwplot(attrition$MonthlyIncome ~ attrition$Gender, data=attrition)
-```
-
-Based on the tables above, Percent Salary Hike is independent of Job Role and is not a major factor in determining attrition as the means are almost the same between those employees lost to attrition and those not. It is also interesting from the Monthly income by gender boxplot that both men and women seem to be earning roughly the same amount which is usually not the case.
-
-```{r}
-Perfomance = attrition$PerformanceRating
-MonthlyIncome = attrition$MonthlyIncome
-Monthly.rate = attrition$MonthlyRate
-
-qplot(Monthly.rate, MonthlyIncome, data = attrition, color = Perfomance)
-
-old.par = par()
-# create a grid of one row and two columns
-par(mfrow = c(1,2))
-with(c,{ggplot(c,aes(y = MonthlyIncome, x = log(Monthly.rate))) +
-  geom_point()
-  p1 +
-  geom_point(aes(color = "Perfomance == 3"))
-  ggplot(c,aes(y = MonthlyIncome, x = log(Monthly.rate))) +
-  geom_point()
-  p1 +
-  geom_point(aes(color = "Perfomance == 4"))
-}
-)
-
-c = data.frame(Monthly.rate, MonthlyIncome, Perfomance)
-ggplot(c,
-       aes(y = MonthlyIncome, x = log(Monthly.rate))) +
-  geom_point()
-
-p1 = ggplot(c, aes(x = log(Monthly.rate), y = MonthlyIncome))
-
-p1 +
-  geom_point(aes(color = Perfomance))
-
-c$pred.SC = predict(lm(MonthlyIncome ~ log(Monthly.rate), data = c))
-
-p1 + geom_point(aes(color = Perfomance)) +
-  geom_line(aes(y = c$pred.SC))
-```
-
-From the above scatterplot, we can see that there is no linear relationship between monthly income and monthly rate
-
-```{r}
-counts = table(attrition$Attrition, attrition$BusinessTravel)
-barplot(counts, main = "Attrition vs Business Travel", xlab="Number of attrition", col=c("darkblue","red"),
- 	legend = rownames(counts))
-
-S=favstats(~attrition$JobInvolvement|attrition$Attrition)
-S
-
-T=favstats(~attrition$JobSatisfaction|attrition$Attrition)
-T
-```
-
-
 ##Regressions
 
 **Linear**
-
 ```{r}
 names(attrition)
 mod.lin <- lm(Age~ DailyRate+DistanceFromHome+JobRole+YearsAtCompany,data=attrition)
 summary(mod.lin)
-```
-
-
-**Logistic**
-
-```{r}
-mod.log <- glm(Age~ Attrition,data=attrition)
-summary(mod.log)
 ```
 
 
@@ -207,6 +227,13 @@ train.df <- attrition[train,]
 test.df <- attrition[-train,]
 #names(train.df)
 ```
+
+**Logistic**
+```{r}
+mod.log <- glm(Attrition ~., family=binomial(link="logit"),data=train.df)
+summary(mod.log)
+```
+
 
 Decision Tree
 
