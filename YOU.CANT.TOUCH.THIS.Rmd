@@ -3,6 +3,7 @@ title: "YOU.CANT.TOUCH.THIS"
 author: "Keen,Obinna, Tari, Roo"
 date: "5/19/2019"
 output:
+  word_document: default
   pdf_document: default
   html_document: default
 ---
